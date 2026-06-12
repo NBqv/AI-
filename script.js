@@ -19,6 +19,10 @@ document.addEventListener("DOMContentLoaded", () => {
   window.ctx = ctx;
   window.canvas = canvas;
 
+  // ── Drawing State ──────────────────────────────────────
+  window.currentColor = "black";
+  window.currentRadius = 40;
+
   // ── Drawing Functions ──────────────────────────────────
   window.drawCircle = (x, y, radius, color) => {
     ctx.beginPath();
