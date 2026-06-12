@@ -54,6 +54,40 @@ document.addEventListener("DOMContentLoaded", () => {
     return result || NaN;
   }
 
+  // ── Position Name Map ──────────────────────────────────
+  const positionMap = [
+    { names: ["左上角"], x: 50, y: 50 },
+    { names: ["右上角"], x: 750, y: 50 },
+    { names: ["左下角"], x: 50, y: 550 },
+    { names: ["右下角"], x: 750, y: 550 },
+    { names: ["中心", "正中央", "中央", "中间"], x: 400, y: 300 },
+    { names: ["左边中间", "左中"], x: 50, y: 300 },
+    { names: ["右边中间", "右中"], x: 750, y: 300 },
+    { names: ["上边中间", "上中"], x: 400, y: 50 },
+    { names: ["下边中间", "下中"], x: 400, y: 550 },
+  ];
+
+  // ── Direction Helpers ──────────────────────────────────
+  const directionMap = {
+    "左": { dx: -1, dy: 0 }, "右": { dx: 1, dy: 0 },
+    "上": { dx: 0, dy: -1 }, "下": { dx: 0, dy: 1 },
+  };
+
+  const defaultStep = 20;
+
+  function getDirection(text) {
+    for (const [key, vec] of Object.entries(directionMap)) {
+      if (text.includes(key)) return vec;
+    }
+    return null;
+  }
+
+  function getStep(text) {
+    if (text.includes("一点点") || text.includes("一点")) return 10;
+    if (text.includes("一大步") || text.includes("很多")) return 50;
+    return defaultStep;
+  }
+
   // ── Drawing Functions ──────────────────────────────────
   window.drawCircle = (x, y, radius = currentRadius, color = currentColor) => {
     console.log(`[Draw] circle at (${x},${y}) radius=${radius} color=${color}`);
@@ -185,6 +219,10 @@ document.addEventListener("DOMContentLoaded", () => {
         "滑县": "画线",
         "花线": "画线",
         "划陷": "画线",
+        "昨上": "左上",
+        "幼上": "右上",
+        "昨下": "左下",
+        "幼下": "右下",
         "请空": "清空",
         "庆功": "清空",
       };
@@ -259,6 +297,54 @@ document.addEventListener("DOMContentLoaded", () => {
         statusEl.textContent = `📏 连线到 (${x}, ${y})`;
         speak(`连线到 ${x}, ${y}`);
         matched = true;
+      }
+
+      // ── Step 1: Position Name → moveTo ──────────────────
+      if (!matched) {
+        for (const entry of positionMap) {
+          if (entry.names.some((n) => text.includes(n))) {
+            moveTo(entry.x, entry.y);
+            statusEl.textContent = `📍 ${entry.names[0]} (${entry.x}, ${entry.y})`;
+            speak(`移动到${entry.names[0]}`);
+            matched = true;
+            break;
+          }
+        }
+      }
+
+      // ── Step 3: Directional line (e.g., "向左画线", "往右画") ──
+      if (!matched) {
+        const hasDirection = Object.keys(directionMap).some((d) => text.includes(d));
+        const wantsDraw = text.includes("画线") || text.includes("画条") || text.includes("画一根");
+        if (hasDirection && wantsDraw) {
+          const dir = getDirection(text);
+          const lineLen = text.includes("一点") ? 50 : text.includes("很多") ? 150 : 100;
+          const nx = currentX + dir.dx * lineLen;
+          const ny = currentY + dir.dy * lineLen;
+          lineTo(nx, ny);
+          const dirName = Object.keys(directionMap).find((d) => text.includes(d));
+          statusEl.textContent = `📏 向${dirName}画线`;
+          speak(`向${dirName}画线`);
+          matched = true;
+        }
+      }
+
+      // ── Step 2: Relative direction move (e.g., "往左一点", "向右") ──
+      if (!matched) {
+        const dir = getDirection(text);
+        const hasMoveWord = dir && (
+          text.includes("往") || text.includes("向") || text.includes("移") || text.includes("走")
+        );
+        if (hasMoveWord) {
+          const step = getStep(text);
+          const nx = Math.round(currentX + dir.dx * step);
+          const ny = Math.round(currentY + dir.dy * step);
+          moveTo(nx, ny);
+          const dirName = Object.keys(directionMap).find((d) => text.includes(d));
+          statusEl.textContent = `📍 往${dirName} (${nx}, ${ny})`;
+          speak(`往${dirName}移动`);
+          matched = true;
+        }
       }
 
       // Circle: match 圆 / 圆圈 / 圆形
