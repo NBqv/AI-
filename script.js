@@ -84,13 +84,15 @@ document.addEventListener("DOMContentLoaded", () => {
         .toLowerCase()
         .trim();
 
-      if (text.includes("画圆")) {
+      // Circle: match 圆 / 圆圈 / 圆形
+      if (["圆", "圆圈", "圆形"].some((kw) => text.includes(kw))) {
         drawCircle(400, 300, 40, "black");
         statusEl.textContent = "✅ 画圆";
         speak("画圆成功");
       }
 
-      if (text.includes("清空")) {
+      // Clear: match 清空 / 清除 / 擦掉
+      if (["清空", "清除", "擦掉"].some((kw) => text.includes(kw))) {
         clearCanvas();
         statusEl.textContent = "✅ 已清空";
         speak("清空成功");
