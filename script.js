@@ -25,6 +25,38 @@ document.addEventListener("DOMContentLoaded", () => {
   window.currentX = 400;
   window.currentY = 300;
 
+  // ── History Stack (Undo) ───────────────────────────────
+  const history = [];
+  const MAX_HISTORY = 50;
+
+  function saveSnapshot() {
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    history.push(data);
+    if (history.length > MAX_HISTORY) history.shift();
+    console.log(`[History] snapshot #${history.length}`);
+  }
+
+  window.undo = () => {
+    if (history.length === 0) {
+      speak("没有可以撤销的操作");
+      return;
+    }
+    const data = history.pop();
+    ctx.putImageData(data, 0, 0);
+    console.log(`[History] undo → #${history.length} remaining`);
+    speak("撤销成功");
+  };
+
+  window.saveDrawing = () => {
+    const link = document.createElement("a");
+    link.download = "drawing.png";
+    link.href = canvas.toDataURL("image/png");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    speak("图片已保存");
+  };
+
   // ── Chinese Number Parser ──────────────────────────────
   const chineseDigit = {
     "零": 0, "一": 1, "二": 2, "三": 3, "四": 4,
@@ -301,6 +333,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ── Drawing Functions ──────────────────────────────────
   window.drawCircle = (x, y, radius = currentRadius, color = currentColor) => {
+    saveSnapshot();
     console.log(`[Draw] circle at (${x},${y}) radius=${radius} color=${color}`);
     ctx.beginPath();
     ctx.arc(x, y, radius, 0, Math.PI * 2);
@@ -310,17 +343,20 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   window.clearCanvas = () => {
+    saveSnapshot();
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   };
 
   window.drawRect = (x = 300, y = 200, width = 100, height = 80, color = currentColor) => {
+    saveSnapshot();
     console.log(`[Draw] rect at (${x},${y}) ${width}x${height} color=${color}`);
     ctx.fillStyle = color;
     ctx.fillRect(x, y, width, height);
   };
 
   window.drawLine = (x1 = 200, y1 = 300, x2 = 600, y2 = 300, color = currentColor) => {
+    saveSnapshot();
     console.log(`[Draw] line from (${x1},${y1}) to (${x2},${y2}) color=${color}`);
     ctx.beginPath();
     ctx.moveTo(x1, y1);
@@ -345,6 +381,7 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   window.lineTo = (x, y) => {
+    saveSnapshot();
     console.log(`[Line] from (${currentX},${currentY}) to (${x},${y})`);
     ctx.beginPath();
     ctx.moveTo(currentX, currentY);
@@ -608,6 +645,20 @@ document.addEventListener("DOMContentLoaded", () => {
         clearCanvas();
         statusEl.textContent = "✅ 已清空";
         speak("清空成功");
+        matched = true;
+      }
+
+      // Undo: match 撤销 / 撤回 / 回退 / 上一步
+      if (!matched && ["撤销", "撤回", "回退", "上一步"].some((kw) => text.includes(kw))) {
+        undo();
+        statusEl.textContent = "↩️ 已撤销";
+        matched = true;
+      }
+
+      // Save: match 保存 / 导出 / 下载
+      if (!matched && ["保存", "导出", "下载图片"].some((kw) => text.includes(kw))) {
+        saveDrawing();
+        statusEl.textContent = "💾 已保存";
         matched = true;
       }
 
