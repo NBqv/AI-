@@ -56,10 +56,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ── Position Name Map ──────────────────────────────────
   const positionMap = [
-    { names: ["左上角"], x: 50, y: 50 },
-    { names: ["右上角"], x: 750, y: 50 },
-    { names: ["左下角"], x: 50, y: 550 },
-    { names: ["右下角"], x: 750, y: 550 },
+    { names: ["左上角", "左上"], x: 50, y: 50 },
+    { names: ["右上角", "右上"], x: 750, y: 50 },
+    { names: ["左下角", "左下"], x: 50, y: 550 },
+    { names: ["右下角", "右下"], x: 750, y: 550 },
     { names: ["中心", "正中央", "中央", "中间"], x: 400, y: 300 },
     { names: ["左边中间", "左中"], x: 50, y: 300 },
     { names: ["右边中间", "右中"], x: 750, y: 300 },
@@ -130,6 +130,7 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.arc(currentX, currentY, 3, 0, Math.PI * 2);
     ctx.fill();
     ctx.closePath();
+    speak(`已移动到X${Math.round(currentX)}，Y${Math.round(currentY)}`);
   };
 
   window.lineTo = (x, y) => {
@@ -143,6 +144,7 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.closePath();
     currentX = x;
     currentY = y;
+    speak(`已连线到X${Math.round(currentX)}，Y${Math.round(currentY)}`);
   };
 
   // ── Speech Synthesis Helper ────────────────────────────
@@ -277,25 +279,23 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
 
-      // Move: "移动到 100,200" / "移动到 100，200"
-      const moveMatch = text.match(/移动到\s*(\d+)\s*[,，]\s*(\d+)/);
+      // Move: "移动到 100,200" / "移动到 100 200" / "移动到 100和200"
+      const moveMatch = text.match(/移动到\s*(\d+)\s*[,，和\s]+\s*(\d+)/);
       if (moveMatch) {
         const x = parseInt(moveMatch[1], 10);
         const y = parseInt(moveMatch[2], 10);
         moveTo(x, y);
         statusEl.textContent = `📍 移动到 (${x}, ${y})`;
-        speak(`移动到 ${x}, ${y}`);
         matched = true;
       }
 
-      // LineTo: "连线到 100,200" / "连线到 100，200"
-      const lineMatch = text.match(/连线到\s*(\d+)\s*[,，]\s*(\d+)/);
+      // LineTo: "连线到 500,400" / "连线到 500 400" / "连线到 500和400"
+      const lineMatch = text.match(/连线到\s*(\d+)\s*[,，和\s]+\s*(\d+)/);
       if (lineMatch) {
         const x = parseInt(lineMatch[1], 10);
         const y = parseInt(lineMatch[2], 10);
         lineTo(x, y);
         statusEl.textContent = `📏 连线到 (${x}, ${y})`;
-        speak(`连线到 ${x}, ${y}`);
         matched = true;
       }
 
@@ -304,34 +304,56 @@ document.addEventListener("DOMContentLoaded", () => {
         for (const entry of positionMap) {
           if (entry.names.some((n) => text.includes(n))) {
             moveTo(entry.x, entry.y);
-            statusEl.textContent = `📍 ${entry.names[0]} (${entry.x}, ${entry.y})`;
-            speak(`移动到${entry.names[0]}`);
+            statusEl.textContent = `📍 ${entry.names[0]}`;
             matched = true;
             break;
           }
         }
       }
 
-      // ── Step 3: Directional line (e.g., "向左画线", "往右画") ──
+      // ── Step 3: Directional line (e.g., "向左画线", "往右上画") ──
       if (!matched) {
-        const hasDirection = Object.keys(directionMap).some((d) => text.includes(d));
+        const combinedDirs = {
+          "左上": { dx: -1, dy: -1 }, "左下": { dx: -1, dy: 1 },
+          "右上": { dx: 1, dy: -1 }, "右下": { dx: 1, dy: 1 },
+        };
+        let dir = null;
+        // Check combined first
+        for (const [key, vec] of Object.entries(combinedDirs)) {
+          if (text.includes(key)) { dir = vec; break; }
+        }
+        if (!dir) dir = getDirection(text);
         const wantsDraw = text.includes("画线") || text.includes("画条") || text.includes("画一根");
-        if (hasDirection && wantsDraw) {
-          const dir = getDirection(text);
+        if (dir && wantsDraw) {
           const lineLen = text.includes("一点") ? 50 : text.includes("很多") ? 150 : 100;
           const nx = currentX + dir.dx * lineLen;
           const ny = currentY + dir.dy * lineLen;
           lineTo(nx, ny);
-          const dirName = Object.keys(directionMap).find((d) => text.includes(d));
+          const dirName = Object.keys(directionMap).find((d) => text.includes(d)) || "斜";
           statusEl.textContent = `📏 向${dirName}画线`;
-          speak(`向${dirName}画线`);
           matched = true;
         }
       }
 
-      // ── Step 2: Relative direction move (e.g., "往左一点", "向右") ──
+      // ── Step 2: Relative direction move ─────────────────
+      // Combined direction support (Step 4): 左+上, 右+下 etc.
       if (!matched) {
-        const dir = getDirection(text);
+        const combinedDirs = {
+          "左上": { dx: -1, dy: -1 }, "左下": { dx: -1, dy: 1 },
+          "右上": { dx: 1, dy: -1 }, "右下": { dx: 1, dy: 1 },
+        };
+        let dir = null;
+        let dirName = null;
+        // Check combined first (e.g., "往左上走")
+        for (const [key, vec] of Object.entries(combinedDirs)) {
+          if (text.includes(key)) { dir = vec; dirName = key; break; }
+        }
+        // Fallback to single direction
+        if (!dir) {
+          for (const [key, vec] of Object.entries(directionMap)) {
+            if (text.includes(key)) { dir = vec; dirName = key; break; }
+          }
+        }
         const hasMoveWord = dir && (
           text.includes("往") || text.includes("向") || text.includes("移") || text.includes("走")
         );
@@ -340,9 +362,7 @@ document.addEventListener("DOMContentLoaded", () => {
           const nx = Math.round(currentX + dir.dx * step);
           const ny = Math.round(currentY + dir.dy * step);
           moveTo(nx, ny);
-          const dirName = Object.keys(directionMap).find((d) => text.includes(d));
           statusEl.textContent = `📍 往${dirName} (${nx}, ${ny})`;
-          speak(`往${dirName}移动`);
           matched = true;
         }
       }
