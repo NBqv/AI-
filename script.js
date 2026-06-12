@@ -70,6 +70,21 @@ document.addEventListener("DOMContentLoaded", () => {
       if (display.trim()) {
         recognizedTextEl.textContent = display;
       }
+
+      // ── Voice Command Parsing ─────────────────────────
+      const text = event.results[event.results.length - 1][0].transcript
+        .toLowerCase()
+        .trim();
+
+      if (text.includes("画圆")) {
+        drawCircle(400, 300, 40, "black");
+        statusEl.textContent = "✅ 画圆";
+      }
+
+      if (text.includes("清空")) {
+        clearCanvas();
+        statusEl.textContent = "✅ 已清空";
+      }
     };
 
     recognition.onerror = (event) => {
