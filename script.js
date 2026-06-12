@@ -88,6 +88,116 @@ document.addEventListener("DOMContentLoaded", () => {
     return defaultStep;
   }
 
+  // ── Line Expression Parser ─────────────────────────────
+  // Extensible: add patterns here as needed
+  const lineActionPrefixes = ["画一条", "画条", "画一根", "绘制", "拉一条", "拉"];
+  const lineActionSuffixes = ["线", "线条"];
+
+  // Check if text is a line command; return the "clean" text (from→to part)
+  function detectLineCommand(text) {
+    // Check for explicit action words first
+    const hasPrefix = lineActionPrefixes.some((p) => text.includes(p));
+    const hasSuffix = lineActionSuffixes.some((s) => text.includes(s));
+    const hasSimple = text.includes("画线") || text.includes("连线");
+
+    if (!hasPrefix && !hasSuffix && !hasSimple) return null;
+
+    // Strip known noise to expose the from→to pattern
+    let clean = text;
+    for (const p of [...lineActionPrefixes].sort((a, b) => b.length - a.length)) {
+      clean = clean.replace(p, "");
+    }
+    for (const s of [...lineActionSuffixes].sort((a, b) => b.length - a.length)) {
+      clean = clean.replace(s, "");
+    }
+    clean = clean.trim();
+    return clean || "";
+  }
+
+  // Resolve a position description like "左上角", "100,200", "100 200" to {x,y}
+  function resolvePosition(desc) {
+    if (!desc) return null;
+    const d = desc.trim();
+
+    // 1. Try position name map (longest match first)
+    const sorted = [...positionMap].sort((a, b) => b.names[0].length - a.names[0].length);
+    for (const entry of sorted) {
+      if (entry.names.some((n) => d.includes(n))) return { x: entry.x, y: entry.y };
+    }
+
+    // 2. Try numeric "100,200", "100 200", "100，200", "100和200"
+    const numMatch = d.match(/(\d+)\s*[,，和\s]+\s*(\d+)/);
+    if (numMatch) return { x: parseInt(numMatch[1], 10), y: parseInt(numMatch[2], 10) };
+
+    // 3. Try single digit "100 200" (no separator)
+    const seqMatch = d.match(/^(\d{2,3})\s*(\d{2,3})$/);
+    if (seqMatch) return { x: parseInt(seqMatch[1], 10), y: parseInt(seqMatch[2], 10) };
+
+    return null;
+  }
+
+  // Main line parser
+  function parseLineCommand(text) {
+    const clean = detectLineCommand(text);
+    if (clean === null) return null;
+
+    console.log(`[LineParser] text="${text}" clean="${clean}"`);
+
+    let fromDesc = null;
+    let toDesc = null;
+
+    // Try "从X到Y" first, then "X到Y" (no 从)
+    const pattern1 = clean.match(/从\s*(.+?)\s*(?:到|至|往)\s*(.+)/);
+    const pattern2 = !pattern1 && clean.match(/(.+?)\s*(?:到|至|往)\s*(.+)/);
+
+    if (pattern1) {
+      fromDesc = pattern1[1].trim();
+      toDesc = pattern1[2].trim();
+    } else if (pattern2) {
+      fromDesc = pattern2[1].trim();
+      toDesc = pattern2[2].trim();
+    }
+
+    if (!fromDesc || !toDesc) {
+      // Bare "画线" / "连线" with no from→to → use defaults
+      if (!clean) return { x1: 200, y1: 300, x2: 600, y2: 300 };
+      // Has content but no from→to pattern (e.g., "向左画线") → defer
+      return null;
+    }
+
+    // Resolve positions
+    const from = resolvePosition(fromDesc);
+    const to = resolvePosition(toDesc);
+
+    if (from && to) {
+      console.log(`[LineParser] (${from.x},${from.y}) → (${to.x},${to.y})`);
+      return { x1: from.x, y1: from.y, x2: to.x, y2: to.y };
+    }
+
+    if (to) {
+      console.log(`[LineParser] partial: current → (${to.x},${to.y})`);
+      return { x1: currentX, y1: currentY, x2: to.x, y2: to.y };
+    }
+
+    return null;
+  }
+    const from = resolvePosition(fromDesc);
+    const to = resolvePosition(toDesc);
+
+    if (from && to) {
+      console.log(`[LineParser] resolved: (${from.x},${from.y}) → (${to.x},${to.y})`);
+      return { x1: from.x, y1: from.y, x2: to.x, y2: to.y };
+    }
+
+    // Partial resolution: if only end point resolved, start from current position
+    if (to) {
+      console.log(`[LineParser] partial: current → (${to.x},${to.y})`);
+      return { x1: currentX, y1: currentY, x2: to.x, y2: to.y };
+    }
+
+    return null;
+  }
+
   // ── Drawing Functions ──────────────────────────────────
   window.drawCircle = (x, y, radius = currentRadius, color = currentColor) => {
     console.log(`[Draw] circle at (${x},${y}) radius=${radius} color=${color}`);
@@ -299,6 +409,19 @@ document.addEventListener("DOMContentLoaded", () => {
         matched = true;
       }
 
+      // ── Line Expression Parser ──────────────────────────
+      // Must fire BEFORE Step 1: "从左上角到右下角画线" contains "左上角"
+      // but should be handled as a line, not a moveTo.
+      if (!matched) {
+        const lineResult = parseLineCommand(text);
+        if (lineResult) {
+          drawLine(lineResult.x1, lineResult.y1, lineResult.x2, lineResult.y2);
+          const shown = text.replace(/[的啊吧哦啦嗯呀]/g, "").trim().slice(0, 24);
+          statusEl.textContent = `📏 ${shown}`;
+          matched = true;
+        }
+      }
+
       // ── Step 1: Position Name → moveTo ──────────────────
       if (!matched) {
         for (const entry of positionMap) {
@@ -380,14 +503,6 @@ document.addEventListener("DOMContentLoaded", () => {
         drawRect();
         statusEl.textContent = "✅ 画矩形";
         speak("画矩形成功");
-        matched = true;
-      }
-
-      // Line: match 画线 / 线条 / 直线 / 线段
-      if (["画线", "线条", "直线", "线段"].some((kw) => text.includes(kw))) {
-        drawLine();
-        statusEl.textContent = "✅ 画线";
-        speak("画线成功");
         matched = true;
       }
 
