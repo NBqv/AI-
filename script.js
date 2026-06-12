@@ -24,7 +24,7 @@ document.addEventListener("DOMContentLoaded", () => {
   window.currentRadius = 40;
 
   // ── Drawing Functions ──────────────────────────────────
-  window.drawCircle = (x, y, radius, color) => {
+  window.drawCircle = (x, y, radius = currentRadius, color = currentColor) => {
     ctx.beginPath();
     ctx.arc(x, y, radius, 0, Math.PI * 2);
     ctx.fillStyle = color;
@@ -130,7 +130,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (text.includes(kw)) {
           currentColor = val;
           statusEl.textContent = `🎨 颜色：${kw}`;
-          speak(`颜色已设为${kw}`);
+          speak(`当前颜色${kw}`);
           matched = true;
           break;
         }
@@ -141,13 +141,13 @@ document.addEventListener("DOMContentLoaded", () => {
       if (radiusMatch) {
         currentRadius = parseInt(radiusMatch[1], 10);
         statusEl.textContent = `📏 半径：${currentRadius}`;
-        speak(`半径已设为${currentRadius}`);
+        speak(`当前半径${currentRadius}`);
         matched = true;
       }
 
       // Circle: match 圆 / 圆圈 / 圆形
       if (["圆", "圆圈", "圆形"].some((kw) => text.includes(kw))) {
-        drawCircle(400, 300, currentRadius, currentColor);
+        drawCircle(400, 300);
         statusEl.textContent = "✅ 画圆";
         speak("画圆成功");
         matched = true;
