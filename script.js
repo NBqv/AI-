@@ -22,6 +22,8 @@ document.addEventListener("DOMContentLoaded", () => {
   // ── Drawing State ──────────────────────────────────────
   window.currentColor = "black";
   window.currentRadius = 40;
+  window.currentX = 400;
+  window.currentY = 300;
 
   // ── Chinese Number Parser ──────────────────────────────
   const chineseDigit = {
@@ -82,6 +84,31 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.lineWidth = 3;
     ctx.stroke();
     ctx.closePath();
+  };
+
+  window.moveTo = (x, y) => {
+    currentX = x;
+    currentY = y;
+    console.log(`[Move] cursor to (${currentX},${currentY})`);
+    // Draw a small dot as visual cursor
+    ctx.fillStyle = "#999";
+    ctx.beginPath();
+    ctx.arc(currentX, currentY, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.closePath();
+  };
+
+  window.lineTo = (x, y) => {
+    console.log(`[Line] from (${currentX},${currentY}) to (${x},${y})`);
+    ctx.beginPath();
+    ctx.moveTo(currentX, currentY);
+    ctx.lineTo(x, y);
+    ctx.strokeStyle = currentColor;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.closePath();
+    currentX = x;
+    currentY = y;
   };
 
   // ── Speech Synthesis Helper ────────────────────────────
@@ -210,6 +237,28 @@ document.addEventListener("DOMContentLoaded", () => {
           speak(`当前半径${currentRadius}`);
           matched = true;
         }
+      }
+
+      // Move: "移动到 100,200" / "移动到 100，200"
+      const moveMatch = text.match(/移动到\s*(\d+)\s*[,，]\s*(\d+)/);
+      if (moveMatch) {
+        const x = parseInt(moveMatch[1], 10);
+        const y = parseInt(moveMatch[2], 10);
+        moveTo(x, y);
+        statusEl.textContent = `📍 移动到 (${x}, ${y})`;
+        speak(`移动到 ${x}, ${y}`);
+        matched = true;
+      }
+
+      // LineTo: "连线到 100,200" / "连线到 100，200"
+      const lineMatch = text.match(/连线到\s*(\d+)\s*[,，]\s*(\d+)/);
+      if (lineMatch) {
+        const x = parseInt(lineMatch[1], 10);
+        const y = parseInt(lineMatch[2], 10);
+        lineTo(x, y);
+        statusEl.textContent = `📏 连线到 (${x}, ${y})`;
+        speak(`连线到 ${x}, ${y}`);
+        matched = true;
       }
 
       // Circle: match 圆 / 圆圈 / 圆形
