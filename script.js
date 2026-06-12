@@ -24,27 +24,32 @@ document.addEventListener("DOMContentLoaded", () => {
   window.currentRadius = 40;
 
   // ── Chinese Number Parser ──────────────────────────────
-  const chineseNum = {
+  const chineseDigit = {
     "零": 0, "一": 1, "二": 2, "三": 3, "四": 4,
-    "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10,
+    "五": 5, "六": 6, "七": 7, "八": 8, "九": 9,
   };
 
   function parseChineseNumber(str) {
-    if (str === "十") return 10;
-    // "十二" → 12, "十一" → 11
-    if (str.startsWith("十") && str.length === 2 && chineseNum[str[1]] !== undefined)
-      return 10 + chineseNum[str[1]];
-    // "二十" → 20, "八十" → 80 (two chars, ends with 十)
-    if (str.length === 2 && str.endsWith("十") && chineseNum[str[0]] !== undefined)
-      return chineseNum[str[0]] * 10;
-    // "二十一" → 21 (three chars, middle is 十)
-    if (str.length === 3 && str[1] === "十") {
-      const t = chineseNum[str[0]], u = chineseNum[str[2]];
-      if (t !== undefined && u !== undefined) return t * 10 + u;
+    let result = 0;
+    let temp = 0;
+
+    for (const ch of str) {
+      if (ch === "十") {
+        result += (temp || 1) * 10;
+        temp = 0;
+      } else if (ch === "百") {
+        result += (temp || 1) * 100;
+        temp = 0;
+      } else if (ch === "千") {
+        result += (temp || 1) * 1000;
+        temp = 0;
+      } else if (chineseDigit[ch] !== undefined) {
+        temp = chineseDigit[ch];
+      }
     }
-    // Single digit: "五" → 5
-    if (str.length === 1 && chineseNum[str] !== undefined) return chineseNum[str];
-    return NaN;
+
+    result += temp;
+    return result || NaN;
   }
 
   // ── Drawing Functions ──────────────────────────────────
@@ -164,8 +169,8 @@ document.addEventListener("DOMContentLoaded", () => {
       // Radius: "半径 50", "半径50", "半径为50", "半径八十", "半径为八十"
       const radiusMatch = text.match(/半径\s*(\d+)/) || text.match(/半径为\s*(\d+)/);
       const cnRadiusMatch = !radiusMatch && (
-        text.match(/半径\s*([零一二三四五六七八九十]+)/) ||
-        text.match(/半径为\s*([零一二三四五六七八九十]+)/)
+        text.match(/半径\s*([零一二三四五六七八九十百千]+)/) ||
+        text.match(/半径为\s*([零一二三四五六七八九十百千]+)/)
       );
       if (radiusMatch) {
         currentRadius = parseInt(radiusMatch[1], 10);
