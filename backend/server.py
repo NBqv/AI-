@@ -57,90 +57,46 @@ device = "cpu"
 
 # ── System prompt ─────────────────────────────────────────
 
-SYSTEM_PROMPT = """你是一个语音绘图助手的命令解析器。用户说一句话，你需要理解意图并提取参数。
+SYSTEM_PROMPT = """你是AI绘图助手。将用户语音命令解析为JSON。
 
-可用的意图（intent）：
-- DRAW_SHAPE: 画图形（圆、矩形等）
-- LINE: 画线
-- MOVE: 移动画笔位置
-- SET_COLOR: 设置颜色
-- SET_SIZE: 设置半径/大小
-- CLEAR: 清空画布
-- UNDO: 撤销
-- SAVE: 保存图片
+intent: DRAW_SHAPE | LINE | MOVE | SET_COLOR | SET_SIZE | CLEAR | UNDO | SAVE
 
-可用的形状（shape）：
-- circle: 圆、圆形、圆圈
-- rect: 矩形、长方形、正方形、方块
+DRAW_SHAPE: {"intent":"DRAW_SHAPE","shape":"circle/rect","color":"颜色","position":{"x":数字,"y":数字}}
+LINE: {"intent":"LINE","from_pos":{"x":数字,"y":数字},"to_pos":{"x":数字,"y":数字}}
+  or {"intent":"LINE","direction":"左/右/上/下"}
+MOVE: {"intent":"MOVE","position":{"x":数字,"y":数字}}
+  or {"intent":"MOVE","direction":"左/右/上/下/左上/左下/右上/右下"}
+SET_COLOR: {"intent":"SET_COLOR","color":"red/blue/green/yellow/black/white/orange/purple/pink"}
+SET_SIZE: {"intent":"SET_SIZE","size":数字}  重要：只说"半径N"或"大小N"就是设大小，不是画圆！
+CLEAR: {"intent":"CLEAR"}
+UNDO: {"intent":"UNDO"}
+SAVE: {"intent":"SAVE"}
 
-可用的颜色（color）：
-- red: 红色、红
-- blue: 蓝色、蓝
-- green: 绿色、绿
-- yellow: 黄色、黄
-- black: 黑色、黑
-- white: 白色、白
-- orange: 橙色、橙
-- purple: 紫色、紫
-- pink: 粉色、粉
+坐标: 左上角(50,50) 右上角(750,50) 左下角(50,550) 右下角(750,550) 中心(400,300)
+颜色: red=红 blue=蓝 green=绿 yellow=黄 black=黑 white=白 orange=橙 purple=紫 pink=粉
 
-可用的位置（position / from_pos / to_pos）：
-- 左上角 → x:50, y:50
-- 右上角 → x:750, y:50
-- 左下角 → x:50, y:550
-- 右下角 → x:750, y:550
-- 中心 / 中央 / 中间 → x:400, y:300
-- 也支持直接数字坐标: x:100, y:200
+只输出JSON。
 
-可用的方向（direction）：
-- 左 / 往左 / 向左
-- 右 / 往右 / 向右
-- 上 / 往上 / 向上
-- 下 / 往下 / 向下
-- 左上 / 左下 / 右上 / 右下
-
-只输出JSON，不要任何其他文字。
-JSON字段只包含有意义的参数，不要随意填充。
-
-示例1: "在左上角画一个红色的圆"
-{"intent":"DRAW_SHAPE","shape":"circle","color":"red","position":{"x":50,"y":50}}
-
-示例2: "从左上角到右下角画线"
-{"intent":"LINE","from_pos":{"x":50,"y":50},"to_pos":{"x":750,"y":550}}
-
-示例3: "红色"
-{"intent":"SET_COLOR","color":"red"}
-
-示例4: "撤销"
-{"intent":"UNDO"}
-
-示例5: "半径80"
-{"intent":"SET_SIZE","size":80}
-
-示例6: "往左一点"
-{"intent":"MOVE","direction":"左"}
-
-示例7: "向右画线"
-{"intent":"LINE","direction":"右"}
-
-示例8: "保存"
-{"intent":"SAVE"}
-
-示例9: "清空"
-{"intent":"CLEAR"}"""
+示例:
+"在左上角画一个红色的圆" → {"intent":"DRAW_SHAPE","shape":"circle","color":"red","position":{"x":50,"y":50}}
+"从中心到右下角画线" → {"intent":"LINE","from_pos":{"x":400,"y":300},"to_pos":{"x":750,"y":550}}
+"红色" → {"intent":"SET_COLOR","color":"red"}
+"半径80" → {"intent":"SET_SIZE","size":80}
+"撤销" → {"intent":"UNDO"}
+"往左一点" → {"intent":"MOVE","direction":"左"}
+"清空" → {"intent":"CLEAR"}"""
 
 
 # ── Prompt builder ────────────────────────────────────────
 
 def build_prompt(user_text: str) -> str:
-    return f"""<|im_start|>system
-{SYSTEM_PROMPT}
-<|im_end|>
-<|im_start|>user
-{user_text}
-<|im_end|>
-<|im_start|>assistant
-"""
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": user_text},
+    ]
+    # Apply Qwen2.5 chat template — requires tokenizer to be loaded
+    text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    return text
 
 
 # ── JSON extraction from model output ─────────────────────
@@ -204,10 +160,8 @@ def inference(text: str) -> ParseResponse:
     with torch.no_grad():
         outputs = model.generate(
             **inputs,
-            max_new_tokens=128,
-            temperature=0.1,
-            top_p=0.9,
-            do_sample=True,
+            max_new_tokens=256,
+            do_sample=False,  # greedy = deterministic, more reliable
             pad_token_id=tokenizer.eos_token_id,
         )
 
@@ -281,4 +235,5 @@ async def parse(req: ParseRequest):
 
 @app.get("/")
 async def root():
-    return {"service": "Voice Draw NLP Backend", "model": "Qwen2.5-0.5B-Instruct", "status": "ok"}
+    m = os.environ.get("MODEL_NAME", "Qwen/Qwen2.5-1.5B-Instruct").split("/")[-1]
+    return {"service": "Voice Draw NLP Backend", "model": m, "status": "ok"}
