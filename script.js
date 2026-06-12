@@ -33,6 +33,14 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   };
 
+  // ── Speech Synthesis Helper ────────────────────────────
+  window.speak = (text) => {
+    if (!window.speechSynthesis) return;
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "zh-CN";
+    speechSynthesis.speak(utterance);
+  };
+
   // ── Elements ────────────────────────────────────────────
   const statusEl = document.getElementById("status");
   const recognizedTextEl = document.getElementById("recognizedText");
@@ -79,11 +87,13 @@ document.addEventListener("DOMContentLoaded", () => {
       if (text.includes("画圆")) {
         drawCircle(400, 300, 40, "black");
         statusEl.textContent = "✅ 画圆";
+        speak("画圆成功");
       }
 
       if (text.includes("清空")) {
         clearCanvas();
         statusEl.textContent = "✅ 已清空";
+        speak("清空成功");
       }
     };
 
