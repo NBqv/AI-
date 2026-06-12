@@ -80,9 +80,22 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       // ── Voice Command Parsing ─────────────────────────
-      const text = event.results[event.results.length - 1][0].transcript
+      let text = event.results[event.results.length - 1][0].transcript
         .toLowerCase()
         .trim();
+
+      // Misrecognition correction map
+      const correctionMap = {
+        "化缘": "画圆",
+        "花园": "画圆",
+        "花圆": "画圆",
+        "画完": "画圆",
+        "请空": "清空",
+        "庆功": "清空",
+      };
+      for (const [wrong, correct] of Object.entries(correctionMap)) {
+        text = text.replaceAll(wrong, correct);
+      }
 
       // Circle: match 圆 / 圆圈 / 圆形
       if (["圆", "圆圈", "圆形"].some((kw) => text.includes(kw))) {
