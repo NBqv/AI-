@@ -79,7 +79,7 @@ device = "cpu"
 
 SYSTEM_PROMPT = """你是AI绘图指令解析器。将用户描述转化为JSON格式的绘图指令。
 
-重要：如果用户已有图形在画布上（通过上文对话可了解），只输出新图形的指令，不要重复画已有的图形。
+如果已知画布上已有哪些图形，只输出新图形的指令，不要重复画已有的图形。
 
 画布尺寸: 宽800, 高600
 坐标参考: 左上角(50,50) 右上角(750,50) 左下角(50,550) 右下角(750,550) 中心(400,300)
@@ -109,12 +109,11 @@ setSize: {"action":"setSize","size":N}  — 设置圆半径
 半径80 → {"intent":"SET_SIZE","size":80}
 在中心画一个红色的圆 → {"intent":"DRAW_SHAPE","shape":"circle","color":"red","position":{"x":400,"y":300}}
 
-画一个城堡 → {"actions":[
-{"action":"drawRect","x":300,"y":250,"width":200,"height":150,"color":"gray"},
+画一个房子 → {"actions":[
+{"action":"drawRect","x":300,"y":250,"width":200,"height":150,"color":"orange"},
 {"action":"drawPolygon","points":[{"x":280,"y":250},{"x":400,"y":150},{"x":520,"y":250}],"color":"red"},
 {"action":"drawRect","x":360,"y":340,"width":80,"height":60,"color":"brown"},
-{"action":"drawRect","x":310,"y":280,"width":30,"height":40,"color":"brown"},
-{"action":"drawRect","x":460,"y":280,"width":30,"height":40,"color":"brown"}]}
+{"action":"drawCircle","x":400,"y":360,"radius":10,"color":"yellow"}]}
 
 画一棵树 → {"actions":[
 {"action":"drawRect","x":385,"y":400,"width":30,"height":100,"color":"brown"},
@@ -151,14 +150,10 @@ setSize: {"action":"setSize","size":N}  — 设置圆半径
 
 def build_prompt(user_text: str, context: str = "") -> str:
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-
     if context.strip():
-        # Context as a separate user-assistant exchange (like a history message)
-        messages.append({"role": "user", "content": "【查看当前画布状态】"})
-        messages.append({"role": "assistant", "content": "好的，我已了解画布上已有的图形。" + context.strip()})
-
+        # Pass canvas state as additional system context
+        messages[0]["content"] = context.strip() + "\n\n" + messages[0]["content"]
     messages.append({"role": "user", "content": user_text})
-
     text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     return text
 
