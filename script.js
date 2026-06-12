@@ -296,12 +296,18 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!data) return false;
     console.log(`[AI]`, data);
 
-    // ── Primary: commands array (model decomposes complex shapes) ──
-    if (data.commands && Array.isArray(data.commands) && data.commands.length > 0) {
+    // Supports both "commands" and "actions" arrays
+    const actions = data.actions || data.commands;
+    const isBatch = Array.isArray(actions) && actions.length > 0;
+
+    if (isBatch) {
+      // Save initial state before batch execution
+      const savedColor = currentColor;
+      const savedRadius = currentRadius;
       saveSnapshot();
-      for (const cmd of data.commands) {
-        if (!cmd.action) continue;
-        const c = cmd.color || currentColor;
+
+      for (const cmd of actions) {
+        const c = cmd.color !== undefined ? cmd.color : currentColor;
         switch (cmd.action) {
           case "drawCircle":
             drawCircle(cmd.x ?? 400, cmd.y ?? 300, cmd.radius ?? currentRadius, c);
@@ -322,14 +328,14 @@ document.addEventListener("DOMContentLoaded", () => {
             if (cmd.color) currentColor = cmd.color;
             break;
           case "setSize":
-            if (cmd.size) currentRadius = cmd.size;
+            if (cmd.size !== undefined && cmd.size !== null) currentRadius = cmd.size;
             break;
           case "clear":
             clearCanvas();
             break;
         }
       }
-      speak(data.commands.length > 1 ? "绘制完成" : "完成");
+      speak(actions.length > 1 ? "绘制完成" : "完成");
       return true;
     }
 

@@ -65,6 +65,7 @@ class ParseResponse(BaseModel):
     size: Optional[int] = None
     direction: Optional[str] = None
     commands: Optional[list[Command]] = None
+    actions: Optional[list[Command]] = None
     raw_text: str = ""
     reasoning: str = ""
 
@@ -75,70 +76,71 @@ device = "cpu"
 
 # ── System prompt ─────────────────────────────────────────
 
-SYSTEM_PROMPT = """你是AI绘图助手。将用户命令解析为JSON。
+SYSTEM_PROMPT = """你是AI绘图指令解析器。将用户描述转化为JSON格式的绘图指令。
 
-简单命令用单意图格式：
-SET_COLOR: {"intent":"SET_COLOR","color":"red/blue/green/yellow/black/white/orange/purple/pink"}
-SET_SIZE: {"intent":"SET_SIZE","size":数字}
-CLEAR: {"intent":"CLEAR"}
-UNDO: {"intent":"UNDO"}
-SAVE: {"intent":"SAVE"}
-MOVE: {"intent":"MOVE","direction":"左/右/上/下"}
-LINE: {"intent":"LINE","direction":"左/右/上/下"}
- or {"intent":"LINE","from_pos":{"x":数字,"y":数字},"to_pos":{"x":数字,"y":数字}}
-DRAW_SHAPE: {"intent":"DRAW_SHAPE","shape":"circle/rect","color":"颜色","position":{"x":数字,"y":数字}}
+画布尺寸: 宽800, 高600
+坐标参考: 左上角(50,50) 右上角(750,50) 左下角(50,550) 右下角(750,550) 中心(400,300)
 
-复杂图形用 commands 数组，拆解为原子操作：
-支持的原子操作: drawCircle, drawRect, drawLine, drawPolygon, drawArc
+支持的颜色: red红 blue蓝 green绿 yellow黄 black黑 white白 orange橙 purple紫 pink粉
 
-drawCircle: {"action":"drawCircle","x":数字,"y":数字,"radius":数字,"color":"颜色"}
-drawRect: {"action":"drawRect","x":数字,"y":数字,"width":数字,"height":数字,"color":"颜色"}
-drawLine: {"action":"drawLine","x1":数字,"y1":数字,"x2":数字,"y2":数字,"color":"颜色"}
-drawPolygon: {"action":"drawPolygon","points":[{"x":数字,"y":数字},...],"color":"颜色"}
-drawArc: {"action":"drawArc","x":数字,"y":数字,"radius":数字,"startAngle":数字,"endAngle":数字,"color":"颜色"}
+简单指令用单意图格式：
+SET_COLOR: {"intent":"SET_COLOR","color":"red"}
+SET_SIZE: {"intent":"SET_SIZE","size":80}
+CLEAR: {"intent":"CLEAR"}  UNDO: {"intent":"UNDO"}  SAVE: {"intent":"SAVE"}
+MOVE: {"intent":"MOVE","direction":"左/右/上/下/左上/左下/右上/右下"}
+LINE: {"intent":"LINE","direction":"左/右/上/下"} or {"intent":"LINE","from_pos":{"x":N,"y":N},"to_pos":{"x":N,"y":N}}
+DRAW_SHAPE: {"intent":"DRAW_SHAPE","shape":"circle/rect","color":"颜色","position":{"x":N,"y":N}}
 
-坐标: 左上角(50,50) 右上角(750,50) 左下角(50,550) 右下角(750,550) 中心(400,300)
-颜色: red红 blue蓝 green绿 yellow黄 black黑 white白 orange橙 purple紫 pink粉
+复杂图形必须拆解为actions数组。支持的原子操作:
+drawCircle: {"action":"drawCircle","x":N,"y":N,"radius":N,"color":"颜色"}
+drawRect: {"action":"drawRect","x":N,"y":N,"width":N,"height":N,"color":"颜色"}
+drawLine: {"action":"drawLine","x1":N,"y1":N,"x2":N,"y2":N,"color":"颜色"}
+drawPolygon: {"action":"drawPolygon","points":[{"x":N,"y":N},...],"color":"颜色"}
+drawArc: {"action":"drawArc","x":N,"y":N,"radius":N,"startAngle":N,"endAngle":N,"color":"颜色"}
+setColor: {"action":"setColor","color":"颜色"}  — 设置后续使用的颜色
+setSize: {"action":"setSize","size":N}  — 设置圆半径
 
-示例:
-"红色" → {"intent":"SET_COLOR","color":"red"}
-"半径80" → {"intent":"SET_SIZE","size":80}
-"撤销" → {"intent":"UNDO"}
-"在左上角画一个红色的圆" → {"intent":"DRAW_SHAPE","shape":"circle","color":"red","position":{"x":50,"y":50}}
-"画一个房子" → {"commands":[
-  {"action":"drawRect","x":300,"y":250,"width":200,"height":150,"color":"orange"},
-  {"action":"drawPolygon","points":[{"x":280,"y":250},{"x":400,"y":150},{"x":520,"y":250}],"color":"red"},
-  {"action":"drawRect","x":360,"y":310,"width":80,"height":90,"color":"brown"},
-  {"action":"drawCircle","x":415,"y":350,"radius":10,"color":"yellow"}
-]}
-"画一棵树" → {"commands":[
-  {"action":"drawRect","x":380,"y":400,"width":40,"height":100,"color":"brown"},
-  {"action":"drawCircle","x":400,"y":350,"radius":60,"color":"green"},
-  {"action":"drawCircle","x":360,"y":380,"radius":45,"color":"darkgreen"},
-  {"action":"drawCircle","x":440,"y":380,"radius":45,"color":"darkgreen"}
-]}
-"画一朵花" → {"commands":[
-  {"action":"drawCircle","x":400,"y":300,"radius":15,"color":"yellow"},
-  {"action":"drawCircle","x":400,"y":260,"radius":20,"color":"pink"},
-  {"action":"drawCircle","x":435,"y":285,"radius":20,"color":"pink"},
-  {"action":"drawCircle","x":425,"y":320,"radius":20,"color":"pink"},
-  {"action":"drawCircle","x":375,"y":320,"radius":20,"color":"pink"},
-  {"action":"drawCircle","x":365,"y":285,"radius":20,"color":"pink"},
-  {"action":"drawLine","x1":400,"y1":340,"x2":400,"y2":420,"color":"green"}
-]}
-"画一个太阳在左上角" → {"commands":[
-  {"action":"drawCircle","x":100,"y":100,"radius":40,"color":"yellow"},
-  {"action":"drawCircle","x":100,"y":100,"radius":50,"color":"orange"},
-  {"action":"drawCircle","x":100,"y":100,"radius":60,"color":"gold"}
-]}
-"画一个带笑脸的房子" → {"commands":[
-  {"action":"drawRect","x":300,"y":250,"width":200,"height":150,"color":"lightblue"},
-  {"action":"drawPolygon","points":[{"x":280,"y":250},{"x":400,"y":140},{"x":520,"y":250}],"color":"red"},
-  {"action":"drawRect","x":355,"y":320,"width":90,"height":80,"color":"brown"},
-  {"action":"drawCircle","x":360,"y":290,"radius":8,"color":"black"},
-  {"action":"drawCircle","x":440,"y":290,"radius":8,"color":"black"},
-  {"action":"drawArc","x":400,"y":310,"radius":25,"startAngle":0,"endAngle":3.14159,"color":"black"}
-]}"""
+示例—必须严格遵循JSON格式，不要有任何额外文字：
+
+红色 → {"intent":"SET_COLOR","color":"red"}
+半径80 → {"intent":"SET_SIZE","size":80}
+在中心画一个红色的圆 → {"intent":"DRAW_SHAPE","shape":"circle","color":"red","position":{"x":400,"y":300}}
+
+画一个房子 → {"actions":[
+{"action":"drawRect","x":300,"y":250,"width":200,"height":150,"color":"orange"},
+{"action":"drawPolygon","points":[{"x":280,"y":250},{"x":400,"y":150},{"x":520,"y":250}],"color":"red"},
+{"action":"drawRect","x":360,"y":340,"width":80,"height":60,"color":"brown"},
+{"action":"drawCircle","x":400,"y":360,"radius":10,"color":"yellow"}]}
+
+画一棵树 → {"actions":[
+{"action":"drawRect","x":385,"y":400,"width":30,"height":100,"color":"brown"},
+{"action":"drawCircle","x":400,"y":370,"radius":50,"color":"green"},
+{"action":"drawCircle","x":370,"y":390,"radius":40,"color":"darkgreen"},
+{"action":"drawCircle","x":430,"y":390,"radius":40,"color":"darkgreen"}]}
+
+画一朵花 → {"actions":[
+{"action":"drawCircle","x":400,"y":330,"radius":12,"color":"yellow"},
+{"action":"drawCircle","x":400,"y":290,"radius":18,"color":"pink"},
+{"action":"drawCircle","x":430,"y":310,"radius":18,"color":"pink"},
+{"action":"drawCircle","x":420,"y":345,"radius":18,"color":"pink"},
+{"action":"drawCircle","x":380,"y":345,"radius":18,"color":"pink"},
+{"action":"drawCircle","x":370,"y":310,"radius":18,"color":"pink"},
+{"action":"drawLine","x1":400,"y1":350,"x2":400,"y2":420,"color":"green"}]}
+
+画一个笑脸 → {"actions":[
+{"action":"drawCircle","x":400,"y":300,"radius":80,"color":"yellow"},
+{"action":"drawCircle","x":370,"y":280,"radius":10,"color":"black"},
+{"action":"drawCircle","x":430,"y":280,"radius":10,"color":"black"},
+{"action":"drawArc","x":400,"y":320,"radius":35,"startAngle":0.15,"endAngle":2.99,"color":"black"}]}
+
+画一个太阳在左上角 → {"actions":[
+{"action":"drawCircle","x":80,"y":80,"radius":35,"color":"yellow"},
+{"action":"drawLine","x1":80,"y1":20,"x2":80,"y2":140,"color":"orange"},
+{"action":"drawLine","x1":20,"y1":80,"x2":140,"y2":80,"color":"orange"},
+{"action":"drawLine","x1":35,"y1":35,"x2":125,"y2":125,"color":"orange"},
+{"action":"drawLine","x1":125,"y1":35,"x2":35,"y2":125,"color":"orange"}]}
+
+你的输出必须严格遵循JSON格式，不要有任何额外文字。"""
 
 
 # ── Prompt builder ────────────────────────────────────────
@@ -186,10 +188,11 @@ def to_response(data: dict, raw_text: str) -> ParseResponse:
             return Position(x=int(p["x"]), y=int(p["y"]))
         return None
 
-    commands_raw = data.get("commands")
-    commands = None
-    if isinstance(commands_raw, list):
-        commands = [Command(**c) if isinstance(c, dict) else c for c in commands_raw]
+    def to_cmd_list(key):
+        raw = data.get(key)
+        if isinstance(raw, list):
+            return [Command(**c) if isinstance(c, dict) else c for c in raw]
+        return None
 
     return ParseResponse(
         intent=data.get("intent", ""),
@@ -200,7 +203,8 @@ def to_response(data: dict, raw_text: str) -> ParseResponse:
         to_pos=to_pos(data.get("to_pos")),
         size=data.get("size"),
         direction=data.get("direction"),
-        commands=commands,
+        commands=to_cmd_list("commands"),
+        actions=to_cmd_list("actions"),
         raw_text=raw_text,
         reasoning=data.get("reasoning", ""),
     )
