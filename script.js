@@ -23,6 +23,30 @@ document.addEventListener("DOMContentLoaded", () => {
   window.currentColor = "black";
   window.currentRadius = 40;
 
+  // ── Chinese Number Parser ──────────────────────────────
+  const chineseNum = {
+    "零": 0, "一": 1, "二": 2, "三": 3, "四": 4,
+    "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10,
+  };
+
+  function parseChineseNumber(str) {
+    if (str === "十") return 10;
+    // "十二" → 12, "十一" → 11
+    if (str.startsWith("十") && str.length === 2 && chineseNum[str[1]] !== undefined)
+      return 10 + chineseNum[str[1]];
+    // "二十" → 20, "八十" → 80 (two chars, ends with 十)
+    if (str.length === 2 && str.endsWith("十") && chineseNum[str[0]] !== undefined)
+      return chineseNum[str[0]] * 10;
+    // "二十一" → 21 (three chars, middle is 十)
+    if (str.length === 3 && str[1] === "十") {
+      const t = chineseNum[str[0]], u = chineseNum[str[2]];
+      if (t !== undefined && u !== undefined) return t * 10 + u;
+    }
+    // Single digit: "五" → 5
+    if (str.length === 1 && chineseNum[str] !== undefined) return chineseNum[str];
+    return NaN;
+  }
+
   // ── Drawing Functions ──────────────────────────────────
   window.drawCircle = (x, y, radius = currentRadius, color = currentColor) => {
     console.log(`[Draw] circle at (${x},${y}) radius=${radius} color=${color}`);
@@ -137,14 +161,27 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
 
-      // Radius: "半径 50", "半径50", "半径为50"
+      // Radius: "半径 50", "半径50", "半径为50", "半径八十", "半径为八十"
       const radiusMatch = text.match(/半径\s*(\d+)/) || text.match(/半径为\s*(\d+)/);
+      const cnRadiusMatch = !radiusMatch && (
+        text.match(/半径\s*([零一二三四五六七八九十]+)/) ||
+        text.match(/半径为\s*([零一二三四五六七八九十]+)/)
+      );
       if (radiusMatch) {
         currentRadius = parseInt(radiusMatch[1], 10);
         console.log(`[Voice] radius set to ${currentRadius}`);
         statusEl.textContent = `📏 半径：${currentRadius}`;
         speak(`当前半径${currentRadius}`);
         matched = true;
+      } else if (cnRadiusMatch) {
+        const parsed = parseChineseNumber(cnRadiusMatch[1]);
+        if (!isNaN(parsed)) {
+          currentRadius = parsed;
+          console.log(`[Voice] radius set to ${currentRadius} (from Chinese number)`);
+          statusEl.textContent = `📏 半径：${currentRadius}`;
+          speak(`当前半径${currentRadius}`);
+          matched = true;
+        }
       }
 
       // Circle: match 圆 / 圆圈 / 圆形
