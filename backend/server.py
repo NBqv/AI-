@@ -50,6 +50,7 @@ class Command(BaseModel):
 
 class ParseRequest(BaseModel):
     text: str
+    context: Optional[str] = None
 
 class Position(BaseModel):
     x: int
@@ -77,6 +78,10 @@ device = "cpu"
 # ── System prompt ─────────────────────────────────────────
 
 SYSTEM_PROMPT = """你是AI绘图指令解析器。将用户描述转化为JSON格式的绘图指令。
+
+注意：如果用户说"在旁边"、"在左边"、"在右边"、"在上方"、"在下方"等相对位置描述，
+请参考上方"当前画布上已有的图形"列表中的坐标，推算新图形的位置。
+例如：已有的一个矩形在x=350处，用户说"在左边画一棵树"，树应放在x≈250处。
 
 画布尺寸: 宽800, 高600
 坐标参考: 左上角(50,50) 右上角(750,50) 左下角(50,550) 右下角(750,550) 中心(400,300)
@@ -145,9 +150,14 @@ setSize: {"action":"setSize","size":N}  — 设置圆半径
 
 # ── Prompt builder ────────────────────────────────────────
 
-def build_prompt(user_text: str) -> str:
+def build_prompt(user_text: str, context: str = "") -> str:
+    # Inject graph context into system prompt for relative positioning
+    sys_prompt = SYSTEM_PROMPT
+    if context.strip():
+        sys_prompt = context.strip() + "\n\n" + SYSTEM_PROMPT
+
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": sys_prompt},
         {"role": "user", "content": user_text},
     ]
     # Apply Qwen2.5 chat template — requires tokenizer to be loaded
@@ -212,13 +222,13 @@ def to_response(data: dict, raw_text: str) -> ParseResponse:
 
 # ── Inference ─────────────────────────────────────────────
 
-def inference(text: str) -> ParseResponse:
+def inference(text: str, context: str = "") -> ParseResponse:
     global model, tokenizer
 
     if model is None:
         raise RuntimeError("Model not loaded. Call GET /load first.")
 
-    prompt = build_prompt(text)
+    prompt = build_prompt(text, context)
     inputs = tokenizer(prompt, return_tensors="pt").to(device)
 
     with torch.no_grad():
@@ -291,7 +301,7 @@ async def parse(req: ParseRequest):
         )
 
     t0 = time.time()
-    result = inference(req.text)
+    result = inference(req.text, context=req.context or "")
     elapsed = time.time() - t0
     result.reasoning = (result.reasoning or "") + f" (inference: {elapsed:.2f}s)"
     return result

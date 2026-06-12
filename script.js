@@ -265,6 +265,63 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   // ── Speech Synthesis ──────────────────────────────────
+
+  // ── Graph Context (for AI relative positioning) ────────
+  const graphList = [];
+  const MAX_GRAPH_HISTORY = 10;
+
+  function recordShape(shape, desc) {
+    graphList.push({ shape, desc });
+    if (graphList.length > MAX_GRAPH_HISTORY) graphList.shift();
+  }
+
+  function getGraphContext() {
+    if (graphList.length === 0) return "";
+    const lines = graphList.map((g, i) => `  ${i + 1}. ${g.desc}`);
+    return "当前画布上已有的图形：\n" + lines.join("\n") + "\n";
+  }
+
+  // Wrap draw functions to record shapes
+  const origDrawCircle = window.drawCircle;
+  window.drawCircle = (x, y, radius = currentRadius, color = currentColor) => {
+    origDrawCircle(x, y, radius, color);
+    recordShape("circle", `圆形，位置(${x},${y})，半径${radius}，颜色${color}`);
+  };
+
+  const origDrawRect = window.drawRect;
+  window.drawRect = (x = 300, y = 200, width = 100, height = 80, color = currentColor) => {
+    origDrawRect(x, y, width, height, color);
+    recordShape("rect", `矩形，位置(${x},${y})，宽${width}高${height}，颜色${color}`);
+  };
+
+  const origDrawLine = window.drawLine;
+  window.drawLine = (x1 = 200, y1 = 300, x2 = 600, y2 = 300, color = currentColor) => {
+    origDrawLine(x1, y1, x2, y2, color);
+    recordShape("line", `线段，从(${x1},${y1})到(${x2},${y2})，颜色${color}`);
+  };
+
+  const origDrawPolygon = window.drawPolygon;
+  window.drawPolygon = (points, color = currentColor) => {
+    origDrawPolygon(points, color);
+    if (points && points.length >= 3) {
+      const avgX = Math.round(points.reduce((s, p) => s + p.x, 0) / points.length);
+      const avgY = Math.round(points.reduce((s, p) => s + p.y, 0) / points.length);
+      recordShape("polygon", `多边形，中心约(${avgX},${avgY})，${points.length}个顶点，颜色${color}`);
+    }
+  };
+
+  const origDrawArc = window.drawArc;
+  window.drawArc = (x, y, radius, startAngle = 0, endAngle = Math.PI, color = currentColor) => {
+    origDrawArc(x, y, radius, startAngle, endAngle, color);
+    recordShape("arc", `弧线，位置(${x},${y})，半径${radius}，颜色${color}`);
+  };
+
+  const origClearCanvas = window.clearCanvas;
+  window.clearCanvas = () => {
+    origClearCanvas();
+    graphList.length = 0;
+  };
+
   window.speak = (text) => {
     if (!window.speechSynthesis) return;
     const utterance = new SpeechSynthesisUtterance(text);
@@ -283,9 +340,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function parseWithAI(text) {
     try {
+      const ctx = getGraphContext();
+      const body = ctx ? { text, context: ctx } : { text };
       const r = await fetch(`${AI_API}/parse`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify(body),
       });
       if (!r.ok) return null;
       return await r.json();
