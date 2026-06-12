@@ -15,6 +15,24 @@ document.addEventListener("DOMContentLoaded", () => {
   ctx.fillStyle = "#fff";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+  // ── Global References ──────────────────────────────────
+  window.ctx = ctx;
+  window.canvas = canvas;
+
+  // ── Drawing Functions ──────────────────────────────────
+  window.drawCircle = (x, y, radius, color) => {
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.closePath();
+  };
+
+  window.clearCanvas = () => {
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  };
+
   // ── Elements ────────────────────────────────────────────
   const statusEl = document.getElementById("status");
   const recognizedTextEl = document.getElementById("recognizedText");
@@ -91,10 +109,6 @@ document.addEventListener("DOMContentLoaded", () => {
     // ── Global Reference ─────────────────────────────────
     window.recognition = recognition;
   }
-
-  // ── Global References ──────────────────────────────────
-  window.ctx = ctx;
-  window.canvas = canvas;
 
   console.log("Voice Draw ready");
 });
