@@ -17,6 +17,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ── Elements ────────────────────────────────────────────
   const statusEl = document.getElementById("status");
+  const recognizedTextEl = document.getElementById("recognizedText");
   const recordBtn = document.getElementById("recordBtn");
 
   // ── Speech Recognition ──────────────────────────────────
@@ -46,10 +47,10 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
 
-      // Show interim results in status bar
+      // Show recognized text in dedicated display area
       const display = final || interim;
       if (display.trim()) {
-        statusEl.textContent = `🎤 ${display}`;
+        recognizedTextEl.textContent = display;
       }
     };
 
@@ -60,7 +61,7 @@ document.addEventListener("DOMContentLoaded", () => {
       // Re-enable button on non-fatal errors
       if (event.error === "no-speech" || event.error === "aborted") {
         recordBtn.disabled = false;
-        recordBtn.textContent = "🎤 开始录音";
+        recordBtn.textContent = "🎤 开始语音";
       }
     };
 
@@ -70,19 +71,19 @@ document.addEventListener("DOMContentLoaded", () => {
         recognition.start();
       } else {
         recordBtn.disabled = false;
-        recordBtn.textContent = "🎤 开始录音";
+        recordBtn.textContent = "🎤 开始语音";
       }
     };
 
     // ── Recording Toggle ─────────────────────────────────
     recordBtn.addEventListener("click", () => {
-      if (recordBtn.textContent === "🎤 开始录音") {
+      if (recordBtn.textContent === "🎤 开始语音") {
         recognition.start();
         recordBtn.textContent = "⏹ 停止录音";
         statusEl.textContent = "🎤 正在聆听...";
       } else {
         recognition.stop();
-        recordBtn.textContent = "🎤 开始录音";
+        recordBtn.textContent = "🎤 开始语音";
         statusEl.textContent = "⏸ 已停止";
       }
     });

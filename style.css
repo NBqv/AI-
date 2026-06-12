@@ -69,3 +69,17 @@ h1 {
   color: #666;
   min-height: 1.6em;
 }
+
+/* Recognized Text Display */
+#recognizedText {
+  margin-top: 8px;
+  font-size: 18px;
+  font-weight: 500;
+  color: #222;
+  min-height: 1.6em;
+  padding: 8px 16px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  text-align: center;
+}
