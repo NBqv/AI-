@@ -63,11 +63,13 @@ document.addEventListener("DOMContentLoaded", () => {
     recognition.onresult = (event) => {
       let interim = "";
       let final = "";
+      let lastFinal = "";
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const transcript = event.results[i][0].transcript;
         if (event.results[i].isFinal) {
           final += transcript;
+          lastFinal = transcript;
         } else {
           interim += transcript;
         }
@@ -79,10 +81,19 @@ document.addEventListener("DOMContentLoaded", () => {
         recognizedTextEl.textContent = display;
       }
 
+      // Only process final results for commands
+      if (!lastFinal) return;
+
       // ── Voice Command Parsing ─────────────────────────
-      let text = event.results[event.results.length - 1][0].transcript
-        .toLowerCase()
-        .trim();
+      let text = lastFinal.toLowerCase().trim();
+
+      // Remove filler words before matching
+      const fillerWords = ["嗯", "啊", "哦", "吧", "的", "了", "嘛", "呀", "啦",
+        "一个", "给我", "帮我", "这个", "那个", "一下", "一下下"];
+      for (const word of fillerWords) {
+        text = text.replaceAll(word, "");
+      }
+      text = text.trim();
 
       // Misrecognition correction map
       const correctionMap = {
