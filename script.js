@@ -186,6 +186,119 @@ document.addEventListener("DOMContentLoaded", () => {
     return null;
   }
 
+  // ── Color Map (global for compound parser) ───────────────
+  const colorMap = {
+    "红色": "red", "红": "red",
+    "蓝色": "blue", "蓝": "blue",
+    "绿色": "green", "绿": "green",
+    "黄色": "yellow", "黄": "yellow",
+    "黑色": "black", "黑": "black",
+    "白色": "white", "白": "white",
+    "橙色": "orange", "橙": "orange",
+    "紫色": "purple", "紫": "purple",
+    "粉色": "pink", "粉": "pink",
+  };
+
+  // ── Shape Keywords ──────────────────────────────────────
+  const shapeMap = {
+    circle: ["圆", "圆形", "圆圈"],
+    rect: ["矩形", "长方形", "正方形", "方块"],
+    line: ["线", "线条", "直线"],
+  };
+
+  // ── Compound Command Parser ──────────────────────────────
+  // Handles: "在左上角画一个红色的圆", "画一个蓝色矩形在中心", etc.
+  function parseCompoundCommand(text) {
+    // ── Step 1: Detect shape ──────────────────────────────
+    let shape = null;
+    for (const [type, keywords] of Object.entries(shapeMap)) {
+      if (keywords.some((kw) => text.includes(kw))) {
+        shape = type;
+        break;
+      }
+    }
+    if (!shape) return null;
+    // Exclude "线条"/"直线" if they're part of a line command
+    if (shape === "line") {
+      // Check if this looks like a line with from→to
+      if (text.includes("从") && (text.includes("到") || text.includes("至"))) return null;
+      // If it contains directional drawing keywords, defer
+      if (text.includes("向") && (text.includes("画") || text.includes("移"))) return null;
+    }
+
+    console.log(`[CompoundParser] shape=${shape} text="${text}"`);
+
+    // ── Step 2: Extract position ──────────────────────────
+    let pos = null;
+    const sortedPos = [...positionMap].sort((a, b) => b.names[0].length - a.names[0].length);
+    for (const entry of sortedPos) {
+      if (entry.names.some((n) => text.includes(n))) {
+        pos = { x: entry.x, y: entry.y };
+        break;
+      }
+    }
+    // Also try numeric position: "在 100,200 画一个圆"
+    if (!pos) {
+      const numPos = text.match(/在\s*(\d+)\s*[,，和\s]+\s*(\d+)/);
+      if (numPos) pos = { x: parseInt(numPos[1], 10), y: parseInt(numPos[2], 10) };
+    }
+
+    // ── Step 3: Extract color ─────────────────────────────
+    let color = null;
+    let colorName = null;
+    for (const [kw, val] of Object.entries(colorMap)) {
+      if (text.includes(kw)) {
+        color = val;
+        colorName = kw;
+        break;
+      }
+    }
+
+    // ── Step 4: Save state & execute ─────────────────────
+    const savedColor = currentColor;
+    const savedX = currentX;
+    const savedY = currentY;
+
+    // Set color if provided
+    if (color) currentColor = color;
+
+    // Default position to center if not specified
+    const drawX = pos ? pos.x : 400;
+    const drawY = pos ? pos.y : 300;
+
+    // Draw based on shape
+    if (shape === "circle") {
+      drawCircle(drawX, drawY);
+      const col = colorName || "当前颜色";
+      const loc = pos ? `在${sortedPos.find((e) => e.names.some((n) => text.includes(n)))?.names[0] || "当前位置"}` : "";
+      statusEl.textContent = `✅ ${loc}画${col}圆`;
+      speak(`画${col}圆成功`);
+      return true;
+    }
+
+    if (shape === "rect") {
+      drawRect(drawX - 50, drawY - 40, 100, 80);
+      const col = colorName || "当前颜色";
+      statusEl.textContent = `✅ 画${col}矩形`;
+      speak(`画${col}矩形成功`);
+      return true;
+    }
+
+    if (shape === "line") {
+      // For compound "line", draw from current to position or a fixed horizontal
+      const lineX1 = pos ? drawX : 200;
+      const lineY1 = pos ? drawY : 300;
+      const lineX2 = pos ? drawX + 200 : 600;
+      const lineY2 = pos ? drawY : 300;
+      drawLine(lineX1, lineY1, lineX2, lineY2);
+      statusEl.textContent = `✅ 画线`;
+      speak("画线成功");
+      return true;
+    }
+
+    return false;
+  }
+
   // ── Drawing Functions ──────────────────────────────────
   window.drawCircle = (x, y, radius = currentRadius, color = currentColor) => {
     console.log(`[Draw] circle at (${x},${y}) radius=${radius} color=${color}`);
@@ -332,18 +445,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
       let matched = false;
 
+      // ── Compound Command Parser ─────────────────────────
+      // Handles: "在左上角画一个红色的圆", "画一个蓝色矩形在中心"
+      // Runs before individual color/shape/position parsers
+      if (!matched) {
+        matched = parseCompoundCommand(text);
+      }
+
       // Color keywords
-      const colorMap = {
-        "红色": "red", "红": "red",
-        "蓝色": "blue", "蓝": "blue",
-        "绿色": "green", "绿": "green",
-        "黄色": "yellow", "黄": "yellow",
-        "黑色": "black", "黑": "black",
-        "白色": "white", "白": "white",
-        "橙色": "orange", "橙": "orange",
-        "紫色": "purple", "紫": "purple",
-        "粉色": "pink", "粉": "pink",
-      };
       for (const [kw, val] of Object.entries(colorMap)) {
         if (text.includes(kw)) {
           currentColor = val;
@@ -478,16 +587,16 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
 
-      // Circle: match 圆 / 圆圈 / 圆形
-      if (["圆", "圆圈", "圆形"].some((kw) => text.includes(kw))) {
+      // Circle: match 圆 / 圆圈 / 圆形 (fallback if compound parser missed)
+      if (!matched && ["圆", "圆圈", "圆形"].some((kw) => text.includes(kw))) {
         drawCircle(400, 300);
         statusEl.textContent = "✅ 画圆";
         speak("画圆成功");
         matched = true;
       }
 
-      // Rectangle: match 矩形 / 长方形 / 正方形 / 方块
-      if (["矩形", "长方形", "正方形", "方块"].some((kw) => text.includes(kw))) {
+      // Rectangle: match 矩形 / 长方形 / 正方形 / 方块 (fallback)
+      if (!matched && ["矩形", "长方形", "正方形", "方块"].some((kw) => text.includes(kw))) {
         drawRect();
         statusEl.textContent = "✅ 画矩形";
         speak("画矩形成功");
