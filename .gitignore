@@ -1,9 +1,43 @@
-node_modules/
+# Python
 __pycache__/
-*.pyc
-.env
-venv/
+*.py[cod]
+*.pyo
+*.egg-info/
 dist/
 build/
+*.egg
+.venv/
+venv/
+env/
+
+# Node / JavaScript
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# IDE / Editor
 .vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Audio files (if any)
+*.wav
+*.mp3
+*.ogg
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Claude
+.claude/settings.local.json
+
+# Logs
 *.log
