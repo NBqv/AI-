@@ -67,6 +67,23 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   };
 
+  window.drawRect = (x = 300, y = 200, width = 100, height = 80, color = currentColor) => {
+    console.log(`[Draw] rect at (${x},${y}) ${width}x${height} color=${color}`);
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, width, height);
+  };
+
+  window.drawLine = (x1 = 200, y1 = 300, x2 = 600, y2 = 300, color = currentColor) => {
+    console.log(`[Draw] line from (${x1},${y1}) to (${x2},${y2}) color=${color}`);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.closePath();
+  };
+
   // ── Speech Synthesis Helper ────────────────────────────
   window.speak = (text) => {
     if (!window.speechSynthesis) return;
@@ -135,6 +152,12 @@ document.addEventListener("DOMContentLoaded", () => {
         "花园": "画圆",
         "花圆": "画圆",
         "画完": "画圆",
+        "举行": "矩形",
+        "巨星": "矩形",
+        "画距型": "画矩形",
+        "滑县": "画线",
+        "花线": "画线",
+        "划陷": "画线",
         "请空": "清空",
         "庆功": "清空",
       };
@@ -194,6 +217,22 @@ document.addEventListener("DOMContentLoaded", () => {
         drawCircle(400, 300);
         statusEl.textContent = "✅ 画圆";
         speak("画圆成功");
+        matched = true;
+      }
+
+      // Rectangle: match 矩形 / 长方形 / 正方形 / 方块
+      if (["矩形", "长方形", "正方形", "方块"].some((kw) => text.includes(kw))) {
+        drawRect();
+        statusEl.textContent = "✅ 画矩形";
+        speak("画矩形成功");
+        matched = true;
+      }
+
+      // Line: match 画线 / 线条 / 直线 / 线段
+      if (["画线", "线条", "直线", "线段"].some((kw) => text.includes(kw))) {
+        drawLine();
+        statusEl.textContent = "✅ 画线";
+        speak("画线成功");
         matched = true;
       }
 
