@@ -2,9 +2,17 @@
 # Start: uvicorn server:app --host 0.0.0.0 --port 8080
 
 import json
+import os
 import re
+import ssl
 import time
 from typing import Optional
+
+# SSL fix for Windows: disable cert verification
+ssl._create_default_https_context = ssl._create_unverified_context
+
+# Use Chinese mirror for HuggingFace (faster downloads in CN)
+os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 
 import torch
 from fastapi import FastAPI
