@@ -114,9 +114,40 @@ document.addEventListener("DOMContentLoaded", () => {
 
       let matched = false;
 
+      // Color keywords
+      const colorMap = {
+        "红色": "red", "红": "red",
+        "蓝色": "blue", "蓝": "blue",
+        "绿色": "green", "绿": "green",
+        "黄色": "yellow", "黄": "yellow",
+        "黑色": "black", "黑": "black",
+        "白色": "white", "白": "white",
+        "橙色": "orange", "橙": "orange",
+        "紫色": "purple", "紫": "purple",
+        "粉色": "pink", "粉": "pink",
+      };
+      for (const [kw, val] of Object.entries(colorMap)) {
+        if (text.includes(kw)) {
+          currentColor = val;
+          statusEl.textContent = `🎨 颜色：${kw}`;
+          speak(`颜色已设为${kw}`);
+          matched = true;
+          break;
+        }
+      }
+
+      // Radius: "半径 50", "半径50"
+      const radiusMatch = text.match(/半径\s*(\d+)/);
+      if (radiusMatch) {
+        currentRadius = parseInt(radiusMatch[1], 10);
+        statusEl.textContent = `📏 半径：${currentRadius}`;
+        speak(`半径已设为${currentRadius}`);
+        matched = true;
+      }
+
       // Circle: match 圆 / 圆圈 / 圆形
       if (["圆", "圆圈", "圆形"].some((kw) => text.includes(kw))) {
-        drawCircle(400, 300, 40, "black");
+        drawCircle(400, 300, currentRadius, currentColor);
         statusEl.textContent = "✅ 画圆";
         speak("画圆成功");
         matched = true;
