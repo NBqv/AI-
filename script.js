@@ -25,6 +25,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ── Drawing Functions ──────────────────────────────────
   window.drawCircle = (x, y, radius = currentRadius, color = currentColor) => {
+    console.log(`[Draw] circle at (${x},${y}) radius=${radius} color=${color}`);
     ctx.beginPath();
     ctx.arc(x, y, radius, 0, Math.PI * 2);
     ctx.fillStyle = color;
@@ -136,10 +137,11 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
 
-      // Radius: "半径 50", "半径50"
-      const radiusMatch = text.match(/半径\s*(\d+)/);
+      // Radius: "半径 50", "半径50", "半径为50"
+      const radiusMatch = text.match(/半径\s*(\d+)/) || text.match(/半径为\s*(\d+)/);
       if (radiusMatch) {
         currentRadius = parseInt(radiusMatch[1], 10);
+        console.log(`[Voice] radius set to ${currentRadius}`);
         statusEl.textContent = `📏 半径：${currentRadius}`;
         speak(`当前半径${currentRadius}`);
         matched = true;
