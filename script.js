@@ -91,11 +91,11 @@ document.addEventListener("DOMContentLoaded", () => {
   // ── Line Expression Parser ─────────────────────────────
   // Extensible: add patterns here as needed
   const lineActionPrefixes = ["画一条", "画条", "画一根", "绘制", "拉一条", "拉"];
-  const lineActionSuffixes = ["线", "线条"];
+  const lineActionSuffixes = ["线条"];
 
   // Check if text is a line command; return the "clean" text (from→to part)
   function detectLineCommand(text) {
-    // Check for explicit action words first
+    // Only trigger on explicit line intent
     const hasPrefix = lineActionPrefixes.some((p) => text.includes(p));
     const hasSuffix = lineActionSuffixes.some((s) => text.includes(s));
     const hasSimple = text.includes("画线") || text.includes("连线");
@@ -110,6 +110,10 @@ document.addEventListener("DOMContentLoaded", () => {
     for (const s of [...lineActionSuffixes].sort((a, b) => b.length - a.length)) {
       clean = clean.replace(s, "");
     }
+    // Strip "画线" / "连线" (may appear after from→to)
+    clean = clean.replace("画线", "").replace("连线", "");
+    // Strip trailing "的线" or "线" at end ("从A到B的线" → "从A到B")
+    clean = clean.replace(/的?线$/, "");
     clean = clean.trim();
     return clean || "";
   }
@@ -174,22 +178,6 @@ document.addEventListener("DOMContentLoaded", () => {
       return { x1: from.x, y1: from.y, x2: to.x, y2: to.y };
     }
 
-    if (to) {
-      console.log(`[LineParser] partial: current → (${to.x},${to.y})`);
-      return { x1: currentX, y1: currentY, x2: to.x, y2: to.y };
-    }
-
-    return null;
-  }
-    const from = resolvePosition(fromDesc);
-    const to = resolvePosition(toDesc);
-
-    if (from && to) {
-      console.log(`[LineParser] resolved: (${from.x},${from.y}) → (${to.x},${to.y})`);
-      return { x1: from.x, y1: from.y, x2: to.x, y2: to.y };
-    }
-
-    // Partial resolution: if only end point resolved, start from current position
     if (to) {
       console.log(`[LineParser] partial: current → (${to.x},${to.y})`);
       return { x1: currentX, y1: currentY, x2: to.x, y2: to.y };
