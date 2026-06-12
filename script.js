@@ -278,8 +278,10 @@ document.addEventListener("DOMContentLoaded", () => {
   function getGraphContext() {
     if (graphList.length === 0) return "";
     const lines = graphList.map((g, i) => `  ${i + 1}. ${g.desc}`);
-    return "当前画布上已有的图形：\n" + lines.join("\n") + "\n";
+    const ctx = "【画布当前状态】以下图形已绘制在画布上（不需要重复绘制），你可以参考它们的坐标来放置新图形：\n" + lines.join("\n");
+    return ctx;
   }
+
 
   // Wrap draw functions to record shapes
   const origDrawCircle = window.drawCircle;
