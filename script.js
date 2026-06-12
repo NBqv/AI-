@@ -235,6 +235,20 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.stroke(); ctx.closePath();
   };
 
+  window.drawPolygon = (points, color = currentColor) => {
+    if (!points || points.length < 3) return;
+    saveSnapshot(); console.log(`[Draw] polygon ${points.length} pts color=${color}`);
+    ctx.beginPath(); ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+    ctx.closePath(); ctx.fillStyle = color; ctx.fill(); ctx.stroke();
+  };
+
+  window.drawArc = (x, y, radius, startAngle = 0, endAngle = Math.PI, color = currentColor) => {
+    saveSnapshot(); console.log(`[Draw] arc at (${x},${y}) r=${radius} a=${startAngle}-${endAngle}`);
+    ctx.beginPath(); ctx.arc(x, y, radius, startAngle, endAngle);
+    ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.stroke(); ctx.closePath();
+  };
+
   window.moveTo = (x, y) => {
     currentX = x; currentY = y;
     console.log(`[Move] cursor to (${currentX},${currentY})`);
@@ -279,8 +293,48 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function executeAIResponse(data) {
-    if (!data || !data.intent) return false;
-    console.log(`[AI] intent=${data.intent}`, data);
+    if (!data) return false;
+    console.log(`[AI]`, data);
+
+    // ── Primary: commands array (model decomposes complex shapes) ──
+    if (data.commands && Array.isArray(data.commands) && data.commands.length > 0) {
+      saveSnapshot();
+      for (const cmd of data.commands) {
+        if (!cmd.action) continue;
+        const c = cmd.color || currentColor;
+        switch (cmd.action) {
+          case "drawCircle":
+            drawCircle(cmd.x ?? 400, cmd.y ?? 300, cmd.radius ?? currentRadius, c);
+            break;
+          case "drawRect":
+            drawRect(cmd.x ?? 300, cmd.y ?? 200, cmd.width ?? 80, cmd.height ?? 60, c);
+            break;
+          case "drawLine":
+            drawLine(cmd.x1 ?? 200, cmd.y1 ?? 300, cmd.x2 ?? 600, cmd.y2 ?? 300, c);
+            break;
+          case "drawPolygon":
+            if (cmd.points) drawPolygon(cmd.points, c);
+            break;
+          case "drawArc":
+            drawArc(cmd.x ?? 400, cmd.y ?? 300, cmd.radius ?? 40, cmd.startAngle ?? 0, cmd.endAngle ?? Math.PI, c);
+            break;
+          case "setColor":
+            if (cmd.color) currentColor = cmd.color;
+            break;
+          case "setSize":
+            if (cmd.size) currentRadius = cmd.size;
+            break;
+          case "clear":
+            clearCanvas();
+            break;
+        }
+      }
+      speak(data.commands.length > 1 ? "绘制完成" : "完成");
+      return true;
+    }
+
+    // ── Fallback: single intent (old format) ──
+    if (!data.intent) return false;
     if (data.intent === "DRAW_SHAPE") {
       const x = data.position?.x ?? currentX; const y = data.position?.y ?? currentY;
       if (data.color) currentColor = data.color;
