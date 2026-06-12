@@ -236,7 +236,7 @@ async def load_model():
         return {"status": "already_loaded"}
 
     model_name = os.environ.get("MODEL_NAME", "Qwen/Qwen2.5-1.5B-Instruct")
-    use_8bit = os.environ.get("MODEL_8BIT", "1") == "1"  # default on for 1.5B
+    use_8bit = os.environ.get("MODEL_8BIT", "0") == "1"  # off by default (affects output quality)
     print(f"[Load] Loading {model_name} on {device} (8bit={use_8bit})...")
     t0 = time.time()
 
