@@ -235,8 +235,9 @@ async def load_model():
     if model is not None:
         return {"status": "already_loaded"}
 
-    model_name = "Qwen/Qwen2.5-0.5B-Instruct"
-    print(f"[Load] Loading {model_name} on {device}...")
+    model_name = os.environ.get("MODEL_NAME", "Qwen/Qwen2.5-1.5B-Instruct")
+    use_8bit = os.environ.get("MODEL_8BIT", "1") == "1"  # default on for 1.5B
+    print(f"[Load] Loading {model_name} on {device} (8bit={use_8bit})...")
     t0 = time.time()
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -245,6 +246,14 @@ async def load_model():
         torch_dtype=torch.float32,  # CPU needs float32
         low_cpu_mem_usage=True,
     )
+
+    # Dynamic quantization: reduces memory ~4x on CPU with minimal quality loss
+    if use_8bit and device == "cpu":
+        model = torch.ao.quantization.quantize_dynamic(
+            model, {torch.nn.Linear}, dtype=torch.qint8
+        )
+        print(f"[Load] Dynamic quantization applied (qint8)")
+
     model.to(device)
     model.eval()
 

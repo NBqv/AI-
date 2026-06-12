@@ -1,53 +1,62 @@
-# Voice Draw — Qwen2.5-0.5B NLP Backend
+# Voice Draw — Qwen2.5 NLP Backend
 
-基于 Qwen2.5-0.5B-Instruct 的中文语音命令解析服务。
+基于 Qwen2.5 系列模型的中文语音命令解析服务（默认使用 1.5B，支持 0.5B）。
 
 ## 环境要求
 
 - Python 3.10+
 - 4GB+ 内存（CPU 运行）
-- 约 2GB 磁盘空间（模型下载）
+- 约 3GB 磁盘空间（模型下载）
 
 ## 安装
 
 ```bash
-# 进入后端目录
 cd backend
-
-# 安装依赖
 pip install -r requirements.txt
 ```
 
 ## 启动
 
 ```bash
-# 加载模型 + 启动服务
+# 默认启动（Qwen2.5-1.5B-Instruct + 8bit量化）
 uvicorn server:app --host 0.0.0.0 --port 8080
 ```
 
-首次启动需要下载模型（约 1GB），下载一次后会自动缓存。
+首次启动会自动下载模型，下载一次后缓存。
+
+## 配置
+
+通过环境变量切换：
+
+| 环境变量 | 说明 | 默认值 |
+|---------|------|--------|
+| `MODEL_NAME` | 模型名称 | `Qwen/Qwen2.5-1.5B-Instruct` |
+| `MODEL_8BIT` | 是否启用 8bit 量化（减少内存） | `1` (启用) |
+
+**示例：使用 0.5B 模型，关闭量化**
+```bash
+MODEL_NAME=Qwen/Qwen2.5-0.5B-Instruct MODEL_8BIT=0 uvicorn server:app --port 8080
+```
+
+**推荐模型：**
+
+| 模型 | 参数量 | 内存 | 推理速度 | 适合 |
+|------|--------|------|---------|------|
+| Qwen2.5-0.5B-Instruct | 0.5B | ~1GB | ~2-4s | 低内存设备 |
+| Qwen2.5-1.5B-Instruct | 1.5B | ~2GB (8bit) | ~5-10s | **默认推荐** |
 
 ## API
 
 ### `GET /load`
-加载模型到内存。启动后首次使用前调用。
+加载模型到内存。调用一次即可。
 
 ### `POST /parse`
 解析自然语言命令。
 
-**请求：**
 ```json
 {"text": "在左上角画一个红色的圆"}
-```
 
-**响应：**
-```json
-{
-  "intent": "DRAW_SHAPE",
-  "shape": "circle",
-  "color": "red",
-  "position": {"x": 50, "y": 50}
-}
+→ {"intent": "DRAW_SHAPE", "shape": "circle", "color": "red", "position": {"x": 50, "y": 50}}
 ```
 
 ### `GET /`
@@ -55,7 +64,7 @@ uvicorn server:app --host 0.0.0.0 --port 8080
 
 ## 前端使用
 
-1. 启动后端服务
+1. 启动后端
 2. 打开 `index.html`
-3. 点击 `🧠 本地模式` 按钮切换为 `🧠 AI模式`
-4. AI 模式会调用后端解析命令，失败时自动回退到本地模式
+3. 点击 `🧠 本地模式` → 切换为 `🧠 AI模式`
+4. 语音命令会自动发往后端解析
