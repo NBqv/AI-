@@ -14,7 +14,10 @@
       <button id="aiToggle" class="btn-secondary">🧠 本地模式</button>
     </div>
     <canvas id="canvas" width="800" height="600"></canvas>
-    <div id="status">准备就绪</div>
+    <div id="status-container">
+      <span id="status-dot" class="dot-idle"></span>
+      <span id="status-label">等待语音</span>
+    </div>
     <div id="recognizedText"></div>
   </div>
   <script src="script.js"></script>

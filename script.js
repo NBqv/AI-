@@ -344,18 +344,27 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       const ctx = getGraphContext();
       const body = ctx ? { text, context: ctx } : { text };
+      console.log(`[Network] POST ${AI_API}/parse body:`, body);
       const r = await fetch(`${AI_API}/parse`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!r.ok) return null;
-      return await r.json();
-    } catch (_) { return null; }
+      if (!r.ok) {
+        console.log(`[Network] 请求失败: ${r.status} ${r.statusText}`);
+        return null;
+      }
+      const result = await r.json();
+      console.log(`[Network] 响应:`, result);
+      return result;
+    } catch (e) {
+      console.log(`[Network] 请求异常（后端没启动?）:`, e.message);
+      return null;
+    }
   }
 
   function executeAIResponse(data) {
     if (!data) return false;
-    console.log(`[AI]`, data);
+    console.log(`[Execute] raw data:`, data);
 
     // Supports both "commands" and "actions" arrays
     const actions = data.actions || data.commands;
@@ -369,6 +378,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       for (const cmd of actions) {
         const c = cmd.color !== undefined ? cmd.color : currentColor;
+        console.log(`[Step 4] → ${cmd.action}`, cmd);
         switch (cmd.action) {
           case "drawCircle":
             drawCircle(cmd.x ?? 400, cmd.y ?? 300, cmd.radius ?? currentRadius, c);
@@ -464,7 +474,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Color
     if (!matched) {
       for (const [kw, val] of Object.entries(colorMap)) {
-        if (text.includes(kw)) { currentColor = val; speak(`当前颜色${kw}`); statusEl.textContent = `🎨 颜色：${kw}`; matched = true; break; }
+        if (text.includes(kw)) { currentColor = val; speak(`当前颜色${kw}`); setStatus(STATUS.SUCCESS, `🎨 颜色：${kw}`); matched = true; break; }
       }
     }
 
@@ -472,33 +482,33 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!matched) {
       const rm = text.match(/半径\s*(\d+)/) || text.match(/半径为\s*(\d+)/);
       const cn = !rm && text.match(/半径\s*([零一二三四五六七八九十百千]+)/);
-      if (rm) { currentRadius = parseInt(rm[1], 10); speak(`当前半径${currentRadius}`); statusEl.textContent = `📏 半径：${currentRadius}`; matched = true; }
-      else if (cn) { const p = parseChineseNumber(cn[1]); if (!isNaN(p)) { currentRadius = p; speak(`当前半径${currentRadius}`); statusEl.textContent = `📏 半径：${currentRadius}`; matched = true; } }
+      if (rm) { currentRadius = parseInt(rm[1], 10); speak(`当前半径${currentRadius}`); setStatus(STATUS.SUCCESS, `📏 半径：${currentRadius}`); matched = true; }
+      else if (cn) { const p = parseChineseNumber(cn[1]); if (!isNaN(p)) { currentRadius = p; speak(`当前半径${currentRadius}`); setStatus(STATUS.SUCCESS, `📏 半径：${currentRadius}`); matched = true; } }
     }
 
     // Move to numeric
     if (!matched) {
       const mm = text.match(/移动到\s*(\d+)\s*[,，和\s]+\s*(\d+)/);
-      if (mm) { moveTo(+mm[1], +mm[2]); statusEl.textContent = `📍 移动到 (${mm[1]}, ${mm[2]})`; matched = true; }
+      if (mm) { moveTo(+mm[1], +mm[2]); setStatus(STATUS.SUCCESS, `📍 移动到 (${mm[1]}, ${mm[2]})`); matched = true; }
     }
 
     // LineTo numeric
     if (!matched) {
       const lm = text.match(/连线到\s*(\d+)\s*[,，和\s]+\s*(\d+)/);
-      if (lm) { lineTo(+lm[1], +lm[2]); statusEl.textContent = `📏 连线到 (${lm[1]}, ${lm[2]})`; matched = true; }
+      if (lm) { lineTo(+lm[1], +lm[2]); setStatus(STATUS.SUCCESS, `📏 连线到 (${lm[1]}, ${lm[2]})`); matched = true; }
     }
 
     // Line expression parser (from→to)
     if (!matched) {
       const lr = parseLineCommand(text);
-      if (lr) { drawLine(lr.x1, lr.y1, lr.x2, lr.y2); statusEl.textContent = `📏 ${text.slice(0, 24)}`; matched = true; }
+      if (lr) { drawLine(lr.x1, lr.y1, lr.x2, lr.y2); setStatus(STATUS.SUCCESS, `📏 ${text.slice(0, 24)}`); matched = true; }
     }
 
     // Position name → moveTo
     if (!matched) {
       const sorted = [...positionMap].sort((a, b) => b.names[0].length - a.names[0].length);
       for (const e of sorted) {
-        if (e.names.some(n => text.includes(n))) { moveTo(e.x, e.y); statusEl.textContent = `📍 ${e.names[0]}`; matched = true; break; }
+        if (e.names.some(n => text.includes(n))) { moveTo(e.x, e.y); setStatus(STATUS.SUCCESS, `📍 ${e.names[0]}`); matched = true; break; }
       }
     }
 
@@ -512,7 +522,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const len = text.includes("一点") ? 50 : text.includes("很多") ? 150 : 100;
         lineTo(currentX + dir.dx * len, currentY + dir.dy * len);
         const dn = Object.keys(directionMap).find(d => text.includes(d)) || "斜";
-        statusEl.textContent = `📏 向${dn}画线`; matched = true;
+        setStatus(STATUS.SUCCESS, `📏 向${dn}画线`); matched = true;
       }
     }
 
@@ -525,29 +535,44 @@ document.addEventListener("DOMContentLoaded", () => {
       if (dir && (text.includes("往") || text.includes("向") || text.includes("移") || text.includes("走"))) {
         const step = getStep(text);
         moveTo(currentX + dir.dx * step, currentY + dir.dy * step);
-        statusEl.textContent = `📍 往${dn}`; matched = true;
+        setStatus(STATUS.SUCCESS, `📍 往${dn}`); matched = true;
       }
     }
 
     // Circle fallback
-    if (!matched && ["圆", "圆圈", "圆形"].some(k => text.includes(k))) { drawCircle(400, 300); speak("画圆成功"); statusEl.textContent = "✅ 画圆"; matched = true; }
+    if (!matched && ["圆", "圆圈", "圆形"].some(k => text.includes(k))) { drawCircle(400, 300); speak("画圆成功"); setStatus(STATUS.SUCCESS, "✅ 画圆"); matched = true; }
     // Rectangle fallback
-    if (!matched && ["矩形", "长方形", "正方形", "方块"].some(k => text.includes(k))) { drawRect(); speak("画矩形成功"); statusEl.textContent = "✅ 画矩形"; matched = true; }
+    if (!matched && ["矩形", "长方形", "正方形", "方块"].some(k => text.includes(k))) { drawRect(); speak("画矩形成功"); setStatus(STATUS.SUCCESS, "✅ 画矩形"); matched = true; }
     // Clear
-    if (!matched && ["清空", "清除", "擦掉"].some(k => text.includes(k))) { clearCanvas(); speak("清空成功"); statusEl.textContent = "✅ 已清空"; matched = true; }
+    if (!matched && ["清空", "清除", "擦掉"].some(k => text.includes(k))) { clearCanvas(); speak("清空成功"); setStatus(STATUS.SUCCESS, "✅ 已清空"); matched = true; }
     // Undo
-    if (!matched && ["撤销", "撤回", "回退", "上一步"].some(k => text.includes(k))) { undo(); statusEl.textContent = "↩️ 已撤销"; matched = true; }
+    if (!matched && ["撤销", "撤回", "回退", "上一步"].some(k => text.includes(k))) { undo(); setStatus(STATUS.SUCCESS, "↩️ 已撤销"); matched = true; }
     // Save
-    if (!matched && ["保存", "导出", "下载图片"].some(k => text.includes(k))) { saveDrawing(); statusEl.textContent = "💾 已保存"; matched = true; }
+    if (!matched && ["保存", "导出", "下载图片"].some(k => text.includes(k))) { saveDrawing(); setStatus(STATUS.SUCCESS, "💾 已保存"); matched = true; }
     // Fallback
     if (!matched && text) speak("没听清，请再说一遍");
   }
 
-  // ── Elements ──────────────────────────────────────────
-  const statusEl = document.getElementById("status");
+  // ── Elements & Status System ──────────────────────────
+  const statusDot = document.getElementById("status-dot");
+  const statusLabel = document.getElementById("status-label");
   const recognizedTextEl = document.getElementById("recognizedText");
   const recordBtn = document.getElementById("recordBtn");
   const aiToggle = document.getElementById("aiToggle");
+
+  const STATUS = {
+    IDLE:      { cls: "dot-idle",      msg: "等待语音" },
+    LISTENING: { cls: "dot-listening", msg: "聆听中..." },
+    THINKING:  { cls: "dot-thinking",  msg: "AI 思考中" },
+    DRAWING:   { cls: "dot-drawing",   msg: "绘图执行中" },
+    SUCCESS:   { cls: "dot-success",   msg: "完成 ✓" },
+    ERROR:     { cls: "dot-error",     msg: "出错" },
+  };
+
+  function setStatus(state, msg) {
+    statusDot.className = state.cls;
+    statusLabel.textContent = msg || state.msg;
+  }
 
   // ── AI Toggle ──────────────────────────────────────────
   if (aiToggle) {
@@ -560,7 +585,7 @@ document.addEventListener("DOMContentLoaded", () => {
           aiMode = true;
           aiToggle.textContent = "🧠 AI模式";
           aiToggle.classList.add("ai-active");
-          statusEl.textContent = "🤖 AI 模式已启用";
+          setStatus(STATUS.IDLE, "AI 模式已启用");
         } else {
           aiMode = false;
           aiToggle.textContent = "🧠 AI离线";
@@ -569,13 +594,13 @@ document.addEventListener("DOMContentLoaded", () => {
             aiToggle.textContent = "🧠 本地模式";
             aiToggle.classList.remove("ai-error", "ai-active");
           }, 3000);
-          statusEl.textContent = "⚠️ AI 后端未启动，使用本地模式";
+          setStatus(STATUS.ERROR, "AI 后端未启动，使用本地模式");
         }
       } else {
         aiMode = false;
         aiToggle.textContent = "🧠 本地模式";
         aiToggle.classList.remove("ai-active");
-        statusEl.textContent = "📡 本地模式";
+        setStatus(STATUS.IDLE, "本地模式");
       }
     });
   }
@@ -584,13 +609,30 @@ document.addEventListener("DOMContentLoaded", () => {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
   if (!SpeechRecognition) {
-    statusEl.textContent = "❌ 您的浏览器不支持语音识别，请使用 Chrome";
+    setStatus(STATUS.ERROR, "浏览器不支持语音识别，请使用 Chrome");
     recordBtn.disabled = true;
   } else {
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = "zh-CN";
+
+    // Track listening state independently of button text
+    let isListening = false;
+    let noSpeechCount = 0;
+    let pendingWork = 0;
+    const MAX_NO_SPEECH_RETRIES = 5;
+
+    function onWorkDone() {
+      pendingWork--;
+      if (pendingWork <= 0 && !isListening) {
+        pendingWork = 0;
+        setStatus(STATUS.IDLE, "已停止");
+      }
+    }
+
+    // ── Reset no-speech counter on any speech activity ──
+    recognition.onaudiostart = () => { noSpeechCount = 0; };
 
     recognition.onresult = (event) => {
       let interim = "", final = "", lastFinal = "";
@@ -603,46 +645,123 @@ document.addEventListener("DOMContentLoaded", () => {
       if (display.trim()) recognizedTextEl.textContent = display;
       if (!lastFinal) return;
 
+      // ── Debug Step 1: 确认语音识别拿到文本 ──
+      console.log(`[Step 1] 语音识别结果: "${lastFinal}"`);
+
+      // Reset retry counter on successful recognition
+      noSpeechCount = 0;
+
       // AI or local mode
       if (aiMode) {
-        statusEl.textContent = "🤖 思考中...";
+        // ── Debug Step 2: 发送给 AI 模型 ──
+        console.log(`[Step 2] 发送给 AI: "${lastFinal}"`);
+        setStatus(STATUS.THINKING, "AI 思考中...");
+        pendingWork++;
         parseWithAI(lastFinal).then((data) => {
-          if (data && data.intent && data.intent !== "UNKNOWN") {
-            statusEl.textContent = `🤖 ${data.intent}`;
-            executeAIResponse(data);
-          } else {
-            statusEl.textContent = "🤖 AI未识别，使用本地模式";
-            parseLocal(lastFinal);
+          try {
+            // ── Debug Step 3: 模型返回结果 ──
+            console.log(`[Step 3] 模型响应:`, data);
+            // Check for actions array first (intent may be empty for complex shapes)
+            const hasActions = data && ((data.actions && data.actions.length > 0) || (data.commands && data.commands.length > 0));
+            const hasValidIntent = data && data.intent && data.intent !== "UNKNOWN";
+            if (hasActions || hasValidIntent) {
+              setStatus(STATUS.DRAWING, `${data.intent}`);
+              // ── Debug Step 4: 执行绘图 ──
+              const actions = data.actions || data.commands;
+              if (actions) console.log(`[Step 4] 解析到 ${actions.length} 个动作:`, actions);
+              executeAIResponse(data);
+              setStatus(STATUS.SUCCESS, "绘制完成 ✓");
+            } else {
+              console.log(`[Step 3] 模型未识别，降级到本地模式`);
+              executeAIResponse(null);
+              parseLocal(lastFinal);
+            }
+          } finally {
+            onWorkDone();
           }
         });
       } else {
+        console.log(`[Step 2] 本地模式解析: "${lastFinal}"`);
         parseLocal(lastFinal);
       }
     };
 
     recognition.onerror = (event) => {
       console.error("Speech recognition error:", event.error);
-      statusEl.textContent = `❌ 错误：${event.error}`;
-      if (event.error === "no-speech" || event.error === "aborted") {
+      if (event.error === "no-speech") {
+        noSpeechCount++;
+        if (noSpeechCount <= MAX_NO_SPEECH_RETRIES) {
+          setStatus(STATUS.ERROR, `没听到声音（${noSpeechCount}/5），正在重试...`);
+          // isListening stays true — onend will restart
+          return;
+        }
+        // Exhausted retries
+        setStatus(STATUS.ERROR, "多次未检测到语音，请检查麦克风");
+        isListening = false;
+        recordBtn.textContent = "🎤 开始语音";
+        speak("请检查麦克风权限");
+        return;
+      }
+      if (event.error === "aborted") {
+        setStatus(STATUS.IDLE, "录音已停止");
+        isListening = false;
+        recordBtn.textContent = "🎤 开始语音";
+        return;
+      }
+      if (event.error === "not-allowed") {
+        setStatus(STATUS.ERROR, "麦克风被拒绝，请在浏览器设置中允许麦克风权限");
+        isListening = false;
+        recordBtn.textContent = "🎤 开始语音";
+        speak("请允许使用麦克风");
+        return;
+      }
+      setStatus(STATUS.ERROR, `错误：${event.error}`);
+      isListening = false;
+      recordBtn.textContent = "🎤 开始语音";
+    };
+
+    function restartRecognition() {
+      if (!isListening) return;
+      // Chrome needs a short delay after no-speech before restarting
+      setTimeout(() => {
+        if (!isListening) return;
+        try {
+          recognition.abort();       // clean up any lingering state
+          recognition.start();
+        } catch (_) {
+          // If still fails, try once more after a longer delay
+          setTimeout(() => {
+            if (!isListening) return;
+            try { recognition.start(); } catch (_) {}
+          }, 500);
+        }
+      }, 300);
+    }
+
+    recognition.onend = () => {
+      if (isListening) restartRecognition();
+      else {
         recordBtn.disabled = false;
         recordBtn.textContent = "🎤 开始语音";
       }
     };
 
-    recognition.onend = () => {
-      if (recordBtn.textContent === "⏹ 停止录音") recognition.start();
-      else { recordBtn.disabled = false; recordBtn.textContent = "🎤 开始语音"; }
-    };
-
+    // ── Start / Stop ──
     recordBtn.addEventListener("click", () => {
-      if (recordBtn.textContent === "🎤 开始语音") {
-        recognition.start();
+      if (!isListening) {
+        noSpeechCount = 0;
+        isListening = true;
         recordBtn.textContent = "⏹ 停止录音";
-        statusEl.textContent = "🎤 正在聆听...";
+        setStatus(STATUS.LISTENING, "正在聆听...");
+        recognition.start();
       } else {
+        isListening = false;
         recognition.stop();
         recordBtn.textContent = "🎤 开始语音";
-        statusEl.textContent = "⏸ 已停止";
+        // Don't override status if AI is still thinking/drawing
+        if (pendingWork === 0) {
+          setStatus(STATUS.IDLE, "已停止");
+        }
       }
     });
 
