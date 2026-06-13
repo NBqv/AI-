@@ -278,6 +278,59 @@ document.addEventListener("DOMContentLoaded", () => {
     speechSynthesis.speak(utterance);
   };
 
+  // ── Graph Context (for AI editing/redrawing) ──────────
+  const graphList = [];
+  const MAX_GRAPH_HISTORY = 10;
+
+  function recordShape(shape, desc) {
+    graphList.push({ shape, desc });
+    if (graphList.length > MAX_GRAPH_HISTORY) graphList.shift();
+  }
+
+  function getGraphContext() {
+    if (graphList.length === 0) return "";
+    const lines = graphList.map((g, i) => `  ${i + 1}. ${g.desc}`);
+    return "【画布当前状态】以下图形已绘制在画布上（不需要重复绘制），你可以参考它们的坐标来修改或补充：\n" + lines.join("\n");
+  }
+
+  // Wrap draw functions to auto-record shapes for context
+  const _origDrawCircle = window.drawCircle;
+  window.drawCircle = (...args) => {
+    _origDrawCircle(...args);
+    recordShape("circle", `圆形(${args[0]},${args[1]}) r=${args[2]} 颜色${args[3]||currentColor}`);
+  };
+  const _origDrawEllipse = window.drawEllipse;
+  window.drawEllipse = (...args) => {
+    _origDrawEllipse(...args);
+    recordShape("ellipse", `椭圆(${args[0]},${args[1]}) rx=${args[2]} ry=${args[3]} 颜色${args[4]||currentColor}`);
+  };
+  const _origDrawRect = window.drawRect;
+  window.drawRect = (...args) => {
+    _origDrawRect(...args);
+    recordShape("rect", `矩形(${args[0]},${args[1]}) ${args[2]}x${args[3]} 颜色${args[4]||currentColor}`);
+  };
+  const _origDrawLine = window.drawLine;
+  window.drawLine = (...args) => {
+    _origDrawLine(...args);
+    recordShape("line", `线段从(${args[0]},${args[1]})到(${args[2]},${args[3]}) 颜色${args[4]||currentColor}`);
+  };
+  const _origDrawArc = window.drawArc;
+  window.drawArc = (...args) => {
+    _origDrawArc(...args);
+    recordShape("arc", `弧线(${args[0]},${args[1]}) r=${args[2]} 颜色${args[4]||currentColor}`);
+  };
+  const _origDrawPolygon = window.drawPolygon;
+  window.drawPolygon = (points, color) => {
+    _origDrawPolygon(points, color);
+    if (points && points.length >= 3) {
+      const avgX = Math.round(points.reduce((s, p) => s + p.x, 0) / points.length);
+      const avgY = Math.round(points.reduce((s, p) => s + p.y, 0) / points.length);
+      recordShape("polygon", `多边形中心(${avgX},${avgY}) ${points.length}顶点 颜色${color||currentColor}`);
+    }
+  };
+  const _origClearCanvas = window.clearCanvas;
+  window.clearCanvas = () => { _origClearCanvas(); graphList.length = 0; };
+
   // ── AI Backend Service ─────────────────────────────────
   const AI_API = "http://localhost:8080";
   let aiMode = false;
@@ -334,10 +387,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function parseWithAI(text) {
     try {
+      // Send graph context so AI knows what's on the canvas
+      const ctx = getGraphContext();
+      const body = ctx ? { text, context: ctx } : { text };
       console.log(`[Network] POST ${AI_API}/parse text="${text}"`);
       const r = await fetch(`${AI_API}/parse`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify(body),
       });
       if (!r.ok) {
         console.log(`[Network] 请求失败: ${r.status}`);
@@ -539,6 +595,16 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!matched && ["撤销", "撤回", "回退", "上一步"].some(k => text.includes(k))) { undo(); statusEl.textContent = "↩️ 已撤销"; matched = true; }
     // Save
     if (!matched && ["保存", "导出", "下载图片"].some(k => text.includes(k))) { saveDrawing(); statusEl.textContent = "💾 已保存"; matched = true; }
+    // Redraw / retry
+    if (!matched && (text.includes("重新画") || text.includes("重画") || text.includes("重来") || text.includes("重新画一个"))) {
+      clearCanvas();
+      speak("已清空，重新来");
+      statusEl.textContent = "🗑️ 已清空，请重新说"; matched = true;
+    }
+    // Retry AI (for AI mode: resend same request)
+    if (!matched && text.includes("换一个") && aiMode) {
+      matched = true; // Don't fall through to "没听清"
+    }
     // Fallback
     if (!matched && text) speak("没听清，请再说一遍");
   }

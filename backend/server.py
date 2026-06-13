@@ -93,6 +93,10 @@ class Command(BaseModel):
     width: Optional[int] = None
     height: Optional[int] = None
     radius: Optional[int] = None
+    radiusX: Optional[int] = None
+    radiusY: Optional[int] = None
+    rx: Optional[int] = None
+    ry: Optional[int] = None
     points: Optional[list] = None
     color: Optional[str] = None
     size: Optional[int] = None
@@ -133,6 +137,7 @@ drawRect — 矩形: x, y, width, height, color
 drawLine — 线段: x1, y1, x2, y2, color
 drawPolygon — 多边形: points=[{"x":N,"y":N},...], color  (用于三角形/屋顶/鱼鳍/翅膀等)
 drawArc — 弧线: x, y, radius, startAngle, endAngle, color  (用于笑脸嘴巴)
+clear — 清空画布（换一个时用）
 setColor/setSize — 设置属性
 
 画布: 800x600. 坐标: 左上(50,50) 右上(750,50) 左下(50,550) 右下(750,550) 中心(400,300) 左(100,300) 右(700,300) 上(400,100) 下(400,500)
@@ -143,11 +148,16 @@ setColor/setSize — 设置属性
 - 蝴蝶 = 椭圆身体 + 两个多边形翅膀
 - 火箭 = 矩形机身 + 三角形头 + 三角翼 + 圆窗
 
+考虑用户说"换一个/换一种方式"时对画布上已有的图形不满意，需要先输出clear清空再画新的。
+考虑用户说"修改/调整/改一下/把...改成..."时是在现有图形上修改，不要clear。
+
+先构思再输出。坐标和尺寸必须合理，确保图形看起来协调好看。
+
 你的输出必须严格遵循JSON格式，不要有任何额外文字。
 
 示例：
 
-画一个房子 → 拆解为墙壁+屋顶+门+把手:
+画一个房子 → 墙壁+屋顶+门+把手:
 {"actions":[
 {"action":"drawRect","x":300,"y":250,"width":200,"height":150,"color":"orange"},
 {"action":"drawPolygon","points":[{"x":280,"y":250},{"x":400,"y":150},{"x":520,"y":250}],"color":"red"},
@@ -386,9 +396,37 @@ def parse_text(text: str, context: str = "") -> ParseResponse:
 
 @app.post("/parse", response_model=ParseResponse)
 async def parse(req: ParseRequest):
-    """Parse a natural language voice command."""
+    """Parse a natural language voice command.
+    Two-tier: 3B fast path, falls back to 7B if 3B fails with context."""
     t0 = time.time()
     result = parse_text(req.text, context=req.context or "")
+
+    # Retry with 7B if 3B failed or only returned clear with context
+    if req.context and OLLAMA_MODEL == "qwen2.5:3b":
+        is_empty = not result.intent and not result.actions
+        just_clear = result.actions and len(result.actions) == 1 and result.actions[0].action == "clear"
+        if is_empty or just_clear:
+            print(f"[Retry] 3B failed with context, trying 7B...")
+            try:
+                backup = "qwen2.5:7b"
+                system_content = SYSTEM_PROMPT
+                if ALIAS_CONTEXT:
+                    system_content = ALIAS_CONTEXT + "\n\n" + system_content
+                messages = [{"role": "system", "content": system_content}]
+                if req.context.strip():
+                    messages[0]["content"] = req.context.strip() + "\n\n" + messages[0]["content"]
+                messages.append({"role": "user", "content": req.text})
+                payload = {"model": backup, "messages": messages, "stream": False, "options": {"temperature": 0, "num_predict": 512}}
+                resp = requests.post(f"{OLLAMA_URL}/api/chat", json=payload, timeout=60)
+                resp.raise_for_status()
+                raw = resp.json()["message"]["content"]
+                parsed = extract_json(raw)
+                r = to_response(parsed, req.text, backend=f"ollama:{backup}")
+                if r.intent or (r.actions and len(r.actions) > 0):
+                    result = r
+            except Exception as e:
+                print(f"[Retry] 7B failed: {e}")
+
     elapsed = time.time() - t0
     result.reasoning = (result.reasoning or "") + f" ({elapsed:.2f}s)"
     return result
