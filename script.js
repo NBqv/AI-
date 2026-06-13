@@ -78,7 +78,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ── Position Name Map ──────────────────────────────────
-  const positionMap = [
+  let positionMap = [
     { names: ["左上角", "左上"], x: 50, y: 50 },
     { names: ["右上角", "右上"], x: 750, y: 50 },
     { names: ["左下角", "左下"], x: 50, y: 550 },
@@ -161,7 +161,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ── Color Map ─────────────────────────────────────────
-  const colorMap = {
+  let colorMap = {
     "红色": "red", "红": "red",
     "蓝色": "blue", "蓝": "blue",
     "绿色": "green", "绿": "green",
@@ -174,7 +174,7 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   // ── Shape Keywords ────────────────────────────────────
-  const shapeMap = {
+  let shapeMap = {
     circle: ["圆", "圆形", "圆圈"],
     rect: ["矩形", "长方形", "正方形", "方块"],
     line: ["线", "线条", "直线"],
@@ -235,6 +235,20 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.stroke(); ctx.closePath();
   };
 
+  window.drawPolygon = (points, color = currentColor) => {
+    if (!points || points.length < 3) return;
+    saveSnapshot(); console.log(`[Draw] polygon ${points.length} pts color=${color}`);
+    ctx.beginPath(); ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+    ctx.closePath(); ctx.fillStyle = color; ctx.fill(); ctx.stroke();
+  };
+
+  window.drawArc = (x, y, radius, startAngle = 0, endAngle = Math.PI, color = currentColor) => {
+    saveSnapshot(); console.log(`[Draw] arc at (${x},${y}) r=${radius} a=${startAngle}-${endAngle}`);
+    ctx.beginPath(); ctx.arc(x, y, radius, startAngle, endAngle);
+    ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.stroke(); ctx.closePath();
+  };
+
   window.moveTo = (x, y) => {
     currentX = x; currentY = y;
     console.log(`[Move] cursor to (${currentX},${currentY})`);
@@ -264,22 +278,107 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function checkAI() {
     try { const r = await fetch(`${AI_API}/`); if (r.ok) return true; } catch (_) {}
-    return false;
   }
+
+  // ── Load aliases from backend (extends local maps) ────
+  async function loadAliases() {
+    try {
+      const r = await fetch(`${AI_API}/aliases`);
+      if (!r.ok) return;
+      const data = await r.json();
+      console.log(`[Aliases] Loaded from backend`);
+
+      // Extend color map
+      if (data.color) {
+        for (const [eng, names] of Object.entries(data.color)) {
+          for (const name of names) {
+            if (!colorMap[name]) colorMap[name] = eng;
+          }
+        }
+      }
+
+      // Extend shape map
+      if (data.shape) {
+        shapeMap = { ...shapeMap };
+        for (const [eng, names] of Object.entries(data.shape)) {
+          for (const name of names) {
+            const key = eng === "rect" ? "rect" : eng;
+            if (!shapeMap[key]) shapeMap[key] = [];
+            if (!shapeMap[key].includes(name)) shapeMap[key].push(name);
+          }
+        }
+      }
+
+      // Extend position map
+      if (data.position_absolute) {
+        for (const entry of data.position_absolute) {
+          const exists = positionMap.some(p => p.names[0] === entry.names[0]);
+          if (!exists) positionMap.push({ names: entry.names, x: entry.x, y: entry.y });
+        }
+      }
+
+      console.log(`[Aliases] colorMap:${Object.keys(data.color).length} shapeMap:${Object.keys(data.shape).length} position_absolute:${data.position_absolute.length}`);
+    } catch (_) {
+      // Backend offline — use local maps only
+    }
+  }
+
+  // Fetch aliases on startup (non-blocking)
+  loadAliases();
 
   async function parseWithAI(text) {
     try {
+      console.log(`[Network] POST ${AI_API}/parse text="${text}"`);
       const r = await fetch(`${AI_API}/parse`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
       });
-      if (!r.ok) return null;
-      return await r.json();
-    } catch (_) { return null; }
+      if (!r.ok) {
+        console.log(`[Network] 请求失败: ${r.status}`);
+        return null;
+      }
+      const result = await r.json();
+      console.log(`[Network] 响应:`, result);
+      return result;
+    } catch (e) {
+      console.log(`[Network] 异常:`, e.message);
+      return null;
+    }
   }
 
   function executeAIResponse(data) {
-    if (!data || !data.intent) return false;
+    if (!data) return false;
+    console.log(`[AI] AI响应数据:`, data);
+
+    // ── 支持 actions 数组格式 ──
+    const actions = data.actions || data.commands;
+    const isBatch = Array.isArray(actions) && actions.length > 0;
+
+    if (isBatch) {
+      saveSnapshot();
+      for (const cmd of actions) {
+        const c = cmd.color !== undefined ? cmd.color : currentColor;
+        console.log(`[AI] 执行动作: ${cmd.action}`, cmd);
+        switch (cmd.action) {
+          case "drawCircle": drawCircle(cmd.x ?? 400, cmd.y ?? 300, cmd.radius ?? currentRadius, c); break;
+          case "drawRect": drawRect(cmd.x ?? 300, cmd.y ?? 200, cmd.width ?? 80, cmd.height ?? 60, c); break;
+          case "drawLine": drawLine(cmd.x1 ?? 200, cmd.y1 ?? 300, cmd.x2 ?? 600, cmd.y2 ?? 300, c); break;
+          case "drawPolygon": if (cmd.points) drawPolygon(cmd.points, c); break;
+          case "drawArc": drawArc(cmd.x ?? 400, cmd.y ?? 300, cmd.radius ?? 40, cmd.startAngle ?? 0, cmd.endAngle ?? Math.PI, c); break;
+          case "setColor": if (cmd.color) currentColor = cmd.color; break;
+          case "setSize": if (cmd.size !== undefined && cmd.size !== null) currentRadius = cmd.size; break;
+          case "clear": clearCanvas(); break;
+        }
+      }
+      speak(actions.length > 1 ? "绘制完成" : "完成");
+      return true;
+    }
+
+    // ── 单意图格式（旧格式兼容） ──
+    if (!data.intent) {
+      console.log(`[AI] 无intent，无法处理`);
+      return false;
+    }
     console.log(`[AI] intent=${data.intent}`, data);
     if (data.intent === "DRAW_SHAPE") {
       const x = data.position?.x ?? currentX; const y = data.position?.y ?? currentY;
@@ -482,13 +581,22 @@ document.addEventListener("DOMContentLoaded", () => {
       if (display.trim()) recognizedTextEl.textContent = display;
       if (!lastFinal) return;
 
+      // ── Debug ──
+      console.log(`[Step 1] 语音识别: "${lastFinal}"`);
+
       // AI or local mode
       if (aiMode) {
+        console.log(`[Step 2] 发送AI: "${lastFinal}"`);
         statusEl.textContent = "🤖 思考中...";
         parseWithAI(lastFinal).then((data) => {
-          if (data && data.intent && data.intent !== "UNKNOWN") {
-            statusEl.textContent = `🤖 ${data.intent}`;
-            executeAIResponse(data);
+          console.log(`[Step 3] AI返回:`, data);
+          // 同时检查 intent 和 actions 数组
+          const hasActions = data && ((data.actions && data.actions.length > 0) || (data.commands && data.commands.length > 0));
+          const hasIntent = data && data.intent && data.intent !== "UNKNOWN";
+          if (hasActions || hasIntent) {
+            const ok = executeAIResponse(data);
+            if (ok) statusEl.textContent = "✅ 完成";
+            else parseLocal(lastFinal);
           } else {
             statusEl.textContent = "🤖 AI未识别，使用本地模式";
             parseLocal(lastFinal);
