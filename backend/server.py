@@ -25,8 +25,12 @@ from pydantic import BaseModel
 # ── Config ─────────────────────────────────────────────────
 BACKEND = os.environ.get("BACKEND", "ollama").lower()  # ollama | local | auto
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:3b")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:7b")
 LOCAL_MODEL_NAME = os.environ.get("MODEL_NAME", "Qwen/Qwen2.5-1.5B-Instruct")
+
+# ── Response cache (same text+context = reuse) ────────────
+response_cache = {}
+MAX_CACHE = 50
 
 # ── Load aliases dictionary ───────────────────────────────
 ALIASES_PATH = Path(__file__).parent / "aliases.json"
@@ -397,35 +401,30 @@ def parse_text(text: str, context: str = "") -> ParseResponse:
 @app.post("/parse", response_model=ParseResponse)
 async def parse(req: ParseRequest):
     """Parse a natural language voice command.
-    Two-tier: 3B fast path, falls back to 7B if 3B fails with context."""
+    Uses 7B by default for best quality. Results are cached:
+    same text + same context → instant replay.
+    Say '换一个' to get a fresh generation."""
     t0 = time.time()
+
+    # ── Cache lookup: same text + same context ──
+    cache_key = f"{req.text}||{req.context or ''}"
+    cached = response_cache.get(cache_key)
+    if cached and not req.context:
+        print(f"[Cache] hit for \"{req.text[:20]}...\"")
+        elapsed = time.time() - t0
+        cached.reasoning = f"(cached: {elapsed:.2f}s)"
+        return cached
+
+    # ── Run inference ──
     result = parse_text(req.text, context=req.context or "")
 
-    # Retry with 7B if 3B failed or only returned clear with context
-    if req.context and OLLAMA_MODEL == "qwen2.5:3b":
-        is_empty = not result.intent and not result.actions
-        just_clear = result.actions and len(result.actions) == 1 and result.actions[0].action == "clear"
-        if is_empty or just_clear:
-            print(f"[Retry] 3B failed with context, trying 7B...")
-            try:
-                backup = "qwen2.5:7b"
-                system_content = SYSTEM_PROMPT
-                if ALIAS_CONTEXT:
-                    system_content = ALIAS_CONTEXT + "\n\n" + system_content
-                messages = [{"role": "system", "content": system_content}]
-                if req.context.strip():
-                    messages[0]["content"] = req.context.strip() + "\n\n" + messages[0]["content"]
-                messages.append({"role": "user", "content": req.text})
-                payload = {"model": backup, "messages": messages, "stream": False, "options": {"temperature": 0, "num_predict": 512}}
-                resp = requests.post(f"{OLLAMA_URL}/api/chat", json=payload, timeout=60)
-                resp.raise_for_status()
-                raw = resp.json()["message"]["content"]
-                parsed = extract_json(raw)
-                r = to_response(parsed, req.text, backend=f"ollama:{backup}")
-                if r.intent or (r.actions and len(r.actions) > 0):
-                    result = r
-            except Exception as e:
-                print(f"[Retry] 7B failed: {e}")
+    # ── Cache result (only if no context, i.e. fresh draws) ──
+    if not req.context and (result.intent or (result.actions and len(result.actions) > 0)):
+        response_cache[cache_key] = result
+        if len(response_cache) > MAX_CACHE:
+            oldest = next(iter(response_cache))
+            del response_cache[oldest]
+        print(f"[Cache] stored for \"{req.text[:20]}...\"")
 
     elapsed = time.time() - t0
     result.reasoning = (result.reasoning or "") + f" ({elapsed:.2f}s)"
@@ -444,6 +443,13 @@ async def get_aliases():
 async def load_model():
     """Load the local transformers model (needed for 'local' and 'auto' modes)."""
     return load_local_model()
+
+
+@app.get("/clearcache")
+async def clear_cache():
+    """Clear the response cache. Call this when you want fresh generations."""
+    response_cache.clear()
+    return {"status": "cache_cleared", "entries": 0}
 
 
 @app.get("/")
