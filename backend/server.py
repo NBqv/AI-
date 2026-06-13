@@ -269,11 +269,15 @@ def inference_ollama(text: str, context: str = "") -> ParseResponse:
         }
     }
 
-    resp = requests.post(f"{OLLAMA_URL}/api/chat", json=payload, timeout=60)
-    resp.raise_for_status()
-    raw = resp.json()["message"]["content"]
-    parsed = extract_json(raw)
-    return to_response(parsed, text, backend=f"ollama:{OLLAMA_MODEL}")
+    try:
+        resp = requests.post(f"{OLLAMA_URL}/api/chat", json=payload, timeout=180)
+        resp.raise_for_status()
+        raw = resp.json()["message"]["content"]
+        parsed = extract_json(raw)
+        return to_response(parsed, text, backend=f"ollama:{OLLAMA_MODEL}")
+    except requests.RequestException as e:
+        print(f"[Ollama] Error: {e}")
+        return to_response({"intent": "UNKNOWN"}, text, backend=f"ollama:{OLLAMA_MODEL}:error")
 
 
 # ═══════════════════════════════════════════════════════════
