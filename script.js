@@ -249,6 +249,12 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.stroke(); ctx.closePath();
   };
 
+  window.drawEllipse = (x, y, radiusX, radiusY, color = currentColor) => {
+    saveSnapshot(); console.log(`[Draw] ellipse at (${x},${y}) rx=${radiusX} ry=${radiusY} color=${color}`);
+    ctx.beginPath(); ctx.ellipse(x, y, radiusX, radiusY, 0, 0, Math.PI * 2);
+    ctx.fillStyle = color; ctx.fill(); ctx.closePath();
+  };
+
   window.moveTo = (x, y) => {
     currentX = x; currentY = y;
     console.log(`[Move] cursor to (${currentX},${currentY})`);
@@ -359,11 +365,27 @@ document.addEventListener("DOMContentLoaded", () => {
       for (const cmd of actions) {
         const c = cmd.color !== undefined ? cmd.color : currentColor;
         console.log(`[AI] 执行动作: ${cmd.action}`, cmd);
+
+        // Normalize polygon points: support [[x,y],[x,y]] or [{"x":N,"y":N},...]
+        let pts = cmd.points;
+        if (pts && pts.length > 0 && Array.isArray(pts[0])) {
+          pts = pts.map(p => ({ x: p[0], y: p[1] }));
+        }
+
         switch (cmd.action) {
-          case "drawCircle": drawCircle(cmd.x ?? 400, cmd.y ?? 300, cmd.radius ?? currentRadius, c); break;
+          case "drawCircle":
+            if (cmd.radiusX !== undefined || cmd.radiusY !== undefined) {
+              drawEllipse(cmd.x ?? 400, cmd.y ?? 300, cmd.radiusX ?? cmd.radius ?? 40, cmd.radiusY ?? cmd.radius ?? 40, c);
+            } else {
+              drawCircle(cmd.x ?? 400, cmd.y ?? 300, cmd.radius ?? currentRadius, c);
+            }
+            break;
+          case "drawEllipse": case "drawOval":
+            drawEllipse(cmd.x ?? 400, cmd.y ?? 300, cmd.radiusX ?? cmd.rx ?? 50, cmd.radiusY ?? cmd.ry ?? 30, c);
+            break;
           case "drawRect": drawRect(cmd.x ?? 300, cmd.y ?? 200, cmd.width ?? 80, cmd.height ?? 60, c); break;
           case "drawLine": drawLine(cmd.x1 ?? 200, cmd.y1 ?? 300, cmd.x2 ?? 600, cmd.y2 ?? 300, c); break;
-          case "drawPolygon": if (cmd.points) drawPolygon(cmd.points, c); break;
+          case "drawPolygon": case "drawTriangle": if (pts) drawPolygon(pts, c); break;
           case "drawArc": drawArc(cmd.x ?? 400, cmd.y ?? 300, cmd.radius ?? 40, cmd.startAngle ?? 0, cmd.endAngle ?? Math.PI, c); break;
           case "setColor": if (cmd.color) currentColor = cmd.color; break;
           case "setSize": if (cmd.size !== undefined && cmd.size !== null) currentRadius = cmd.size; break;
