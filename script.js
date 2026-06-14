@@ -1230,6 +1230,13 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function tryRelativePosition(text) {
+    var REL_DIR_MAP = {
+      "左边": { dx: -1, dy: 0 }, "左侧": { dx: -1, dy: 0 }, "左": { dx: -1, dy: 0 },
+      "右边": { dx: 1, dy: 0 }, "右侧": { dx: 1, dy: 0 }, "右": { dx: 1, dy: 0 },
+      "上边": { dx: 0, dy: -1 }, "上面": { dx: 0, dy: -1 }, "上方": { dx: 0, dy: -1 }, "上": { dx: 0, dy: -1 },
+      "下边": { dx: 0, dy: 1 }, "下面": { dx: 0, dy: 1 }, "下方": { dx: 0, dy: 1 }, "下": { dx: 0, dy: 1 },
+      "旁边": { dx: -1.5, dy: 0 }, "附近": { dx: -1.5, dy: -0.5 },
+    };
     var patterns = [
       /在(.+?)(左边|右边|上边|下边|上面|下面|上方|下方|左侧|右侧|旁边|附近|左|右|上|下)画(?:个|一个|只|条|棵|朵|座|的)?(.+)/,
       /在(.+?)的(左边|右边|上边|下边|上面|下面|左侧|右侧|旁边|附近|左|右|上|下)画(?:个|一个|只|条|棵|朵|座|的)?(.+)/,
@@ -1297,6 +1304,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const AI_API = "http://localhost:8080";
 
   let aiMode = false;
+  window.aiMode = aiMode;
 
 
 
@@ -1906,6 +1914,40 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 
+  // ── Utility buttons ────────────────────────────────────
+  if (undoBtn) {
+    undoBtn.addEventListener("click", () => { if (typeof window.undo === "function") window.undo(); });
+  }
+  if (clearBtn) {
+    clearBtn.addEventListener("click", () => { if (typeof window.clearCanvas === "function") window.clearCanvas(); speak("已清空"); });
+  }
+  if (saveBtn) {
+    saveBtn.addEventListener("click", () => { if (typeof window.saveDrawing === "function") window.saveDrawing(); });
+  }
+
+  // ── Quick tips ──────────────────────────────────────────
+  document.querySelectorAll(".tip").forEach(function(tip) {
+    tip.addEventListener("click", function() {
+      var text = this.getAttribute("data-text") || "";
+      if (!text) return;
+      document.getElementById("recognizedText").textContent = text;
+      if (aiMode) {
+        setStatus(STATUS.THINKING, "AI 思考中...");
+        parseWithAI(text).then(function(data) {
+          var a = data && (data.actions || data.commands);
+          if (a && a.length > 0) {
+            executeAIResponse(data);
+            setStatus(STATUS.SUCCESS, "完成 ✓");
+          } else {
+            parseLocal(text);
+          }
+        });
+      } else {
+        parseLocal(text);
+      }
+    });
+  });
+
   // ── AI Toggle ──────────────────────────────────────────
 
   if (aiToggle) {
@@ -2138,7 +2180,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         recordBtn.disabled = false;
 
-        recordBtn.textContent = "🎤 开始语音";
+        recordBtn.textContent = "🎤 开始说话"; recordBtn.classList.remove("recording");
 
       }
 
@@ -2148,9 +2190,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     recognition.onend = () => {
 
-      if (recordBtn.textContent === "⏹ 停止录音") recognition.start();
+      if (recordBtn.textContent === "⏹ 停止") recognition.start();
 
-      else { recordBtn.disabled = false; recordBtn.textContent = "🎤 开始语音"; }
+      else { recordBtn.disabled = false; recordBtn.textContent = "🎤 开始说话"; recordBtn.classList.remove("recording"); }
 
     };
 
@@ -2158,11 +2200,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     recordBtn.addEventListener("click", () => {
 
-      if (recordBtn.textContent === "🎤 开始语音") {
+      if (recordBtn.textContent === "🎤 开始说话") {
 
         recognition.start();
 
-        recordBtn.textContent = "⏹ 停止录音";
+        recordBtn.textContent = "⏹ 停止"; recordBtn.classList.add("recording");
 
         setStatus(STATUS.LISTENING, "正在聆听...");
 
@@ -2170,7 +2212,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         recognition.stop();
 
-        recordBtn.textContent = "🎤 开始语音";
+        recordBtn.textContent = "🎤 开始说话"; recordBtn.classList.remove("recording");
 
         setStatus(STATUS.IDLE, "已停止");
 
