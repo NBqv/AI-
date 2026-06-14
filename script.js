@@ -681,7 +681,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ── Erase & Move: "擦掉兔子" / "把兔子移到右边" ──────────
 
-  function rebuildCanvas() {
+    function rebuildCanvas() {
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     graphList.length = 0;
@@ -689,6 +689,12 @@ document.addEventListener("DOMContentLoaded", () => {
       var entry = actionHistory[hi];
       var fn = window[entry.fn];
       if (fn) fn.apply(null, entry.args);
+      if (entry.fn === "_batch_composite") {
+        var cname = (entry.desc || "").replace("tpl_composite:", "");
+        var cx = entry.args[0] || 400;
+        var cy = entry.args[1] || 300;
+        recordShape(cname, "tpl_composite:" + cname, cx, cy);
+      }
     }
   }
 
@@ -720,9 +726,9 @@ document.addEventListener("DOMContentLoaded", () => {
       var entry = actionHistory[hi];
       if (entry.fn === "_batch_start") {
         var desc = entry.desc || "";
-        if (desc.indexOf(keyword) >= 0 || desc.indexOf("模板开始:") >= 0) {
+        if (desc.indexOf(keyword) >= 0 || desc.indexOf("tpl_start:") >= 0) {
           markerIdx = hi;
-          markerName = desc.replace("模板开始:", "");
+          markerName = desc.replace("tpl_start:", "");
           break;
         }
       }
@@ -1005,7 +1011,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     if (!tplActions) {
-      console.log("[Relative] 找不到模板 " + targetName);
+      console.log("[Relative] no template for " + targetName);
       return null;
     }
 
@@ -1198,6 +1204,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       saveSnapshot();
 
+      if (lastTemplateName) { actionHistory.push({fn: "_batch_start", args: [], desc: "tpl_start:" + lastTemplateName}); }
       for (const cmd of actions) {
 
         const c = cmd.color !== undefined ? cmd.color : currentColor;
@@ -1271,13 +1278,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
       speak(actions.length > 1 ? "绘制完成" : "完成");
       if (lastTemplateName) {
-        actionHistory.push({fn: "_batch_start", args: [], desc: "模板开始:" + lastTemplateName});
+        actionHistory.push({fn: "_batch_start", args: [], desc: "tpl_start:" + lastTemplateName});
         var _sx = 0, _sy = 0, _sc = 0;
         for (var _ri = 0; _ri < graphList.length; _ri++) {
           var _g = graphList[_ri];
           if (_g.cx != null) { _sx += _g.cx; _sy += _g.cy; _sc++; }
         }
-        if (_sc > 0) recordShape(lastTemplateName, "模板:" + lastTemplateName, Math.round(_sx/_sc), Math.round(_sy/_sc));
+        if (_sc > 0) {
+          var _bcx = Math.round(_sx/_sc), _bcy = Math.round(_sy/_sc);
+          actionHistory.push({fn: "_batch_composite", args: [_bcx, _bcy], desc: "tpl_composite:" + lastTemplateName});
+          recordShape(lastTemplateName, "tpl_composite:" + lastTemplateName, _bcx, _bcy);
+        }
         lastTemplateName = "";
       }
 
@@ -1832,7 +1843,7 @@ document.addEventListener("DOMContentLoaded", () => {
           if (hasActions || hasIntent) {
 
             if (data.backend && data.backend.indexOf("template:") === 0) {
-              lastTemplateName = data.backend.replace("template:", "");
+              lastTemplateName = data.backend.replace("tpl_composite:", "");
             }
 
             const ok = executeAIResponse(data);
