@@ -279,7 +279,6 @@ def inference_ollama(text: str, context: str = "") -> ParseResponse:
         print(f"[Ollama] Error: {e}")
         return to_response({"intent": "UNKNOWN"}, text, backend=f"ollama:{OLLAMA_MODEL}:error")
 
-
 # ═══════════════════════════════════════════════════════════
 #  Backend: Local (transformers)
 # ═══════════════════════════════════════════════════════════
@@ -495,5 +494,6 @@ async def root():
         "local_model": LOCAL_MODEL_NAME.split("/")[-1],
         "ollama_online": check_ollama(),
         "local_loaded": local_model is not None,
+        "templates": len(aliases.get("complex_shapes", {})),
         "status": "ok",
     }
