@@ -1077,7 +1077,19 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Pattern 2: "把兔子移到右边" / "把乌龟移到左边" / "移动兔子到上面"
-    var moveMatch = text.match(/把(.+?)(?:移到|移动到|挪到|移至)(?:左边|右边|上边|下边|上面|下面|左侧|右侧|左|右|上|下)/);
+    var moveMatch = text.match(/把(.+?)(?:移到|移动到|挪到|移至|移向|向|往)(?:左边|右边|上边|下边|上面|下面|左侧|右侧|左|右|上|下)/);
+    if (moveMatch) {
+      // Ensure the matched verb is followed by direction, not just end of word
+      // For "向" and "往", they may need "移动" suffix
+      var fullMatch = moveMatch[0];
+      if (fullMatch.indexOf("向") >= 0 && text.indexOf("移动", moveMatch.index + fullMatch.length - 2) < 0) {
+        // "向" without "移动" after it - skip this match
+        moveMatch = null;
+      }
+    }
+    if (!moveMatch) {
+      moveMatch = text.match(/把(.+?)(?:向|往)(.+?)(?:边|面|侧|方)?(?:移|移动|挪)/);
+    }
     if (!moveMatch) {
       moveMatch = text.match(/(?:移到|移动到|挪动)(.+?)到(?:左边|右边|上边|下边|上面|下面|左侧|右侧|左|右|上|下)/);
     }
@@ -1087,6 +1099,10 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!moveMatch) {
       // Simpler: "移动兔子到右边"
       moveMatch = text.match(/移动(.+?)(?:到|至)(.+?)(?:边|面|侧|方)/);
+    }
+    if (!moveMatch) {
+      // "兔子右移" / "猫左移"
+      moveMatch = text.match(/(.+?)(?:左移|右移|上移|下移)/);
     }
     if (moveMatch) {
       var target = moveMatch[1].trim();
@@ -1938,6 +1954,9 @@ document.addEventListener("DOMContentLoaded", () => {
         parseWithAI(text).then(function(data) {
           var a = data && (data.actions || data.commands);
           if (a && a.length > 0) {
+            if (data.backend && data.backend.indexOf("template:") === 0) {
+              lastTemplateName = data.backend.replace("template:", "");
+            }
             executeAIResponse(data);
             setStatus(STATUS.SUCCESS, "完成 ✓");
           } else {
