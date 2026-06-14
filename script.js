@@ -435,6 +435,8 @@ document.addEventListener("DOMContentLoaded", () => {
   window.drawCircle = (x, y, radius = currentRadius, color = currentColor) => {
 
     saveSnapshot();
+    if (!_rebuilding)
+    actionHistory.push({fn: "drawCircle", args: [x, y, radius, color], desc: "圆形("+x+","+y+") r="+radius});
 
     console.log(`[Draw] circle at (${x},${y}) radius=${radius} color=${color}`);
 
@@ -446,13 +448,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 
-  window.clearCanvas = () => { saveSnapshot(); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height); };
+  window.clearCanvas = () => { saveSnapshot(); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height); if (!_rebuilding) actionHistory = []; };
 
 
 
   window.drawRect = (x = 300, y = 200, width = 100, height = 80, color = currentColor) => {
 
-    saveSnapshot(); console.log(`[Draw] rect at (${x},${y}) ${width}x${height} color=${color}`);
+    saveSnapshot(); if (!_rebuilding) actionHistory.push({fn: "drawRect", args: [x, y, width, height, color], desc: "rect"}); console.log(`[Draw] rect at (${x},${y}) ${width}x${height} color=${color}`);
 
     ctx.fillStyle = color; ctx.fillRect(x, y, width, height);
 
@@ -462,7 +464,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   window.drawLine = (x1 = 200, y1 = 300, x2 = 600, y2 = 300, color = currentColor) => {
 
-    saveSnapshot(); console.log(`[Draw] line from (${x1},${y1}) to (${x2},${y2}) color=${color}`);
+    saveSnapshot(); if (!_rebuilding) actionHistory.push({fn: "drawLine", args: [x1, y1, x2, y2, color], desc: "line"}); console.log(`[Draw] line from (${x1},${y1}) to (${x2},${y2}) color=${color}`);
 
     ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
 
@@ -476,7 +478,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (!points || points.length < 3) return;
 
-    saveSnapshot(); console.log(`[Draw] polygon ${points.length} pts color=${color}`);
+    saveSnapshot(); if (!_rebuilding) actionHistory.push({fn: "drawPolygon", args: [points, color], desc: "poly"}); console.log(`[Draw] polygon ${points.length} pts color=${color}`);
 
     ctx.beginPath(); ctx.moveTo(points[0].x, points[0].y);
 
@@ -490,7 +492,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   window.drawArc = (x, y, radius, startAngle = 0, endAngle = Math.PI, color = currentColor) => {
 
-    saveSnapshot(); console.log(`[Draw] arc at (${x},${y}) r=${radius} a=${startAngle}-${endAngle}`);
+    saveSnapshot(); if (!_rebuilding) actionHistory.push({fn: "drawArc", args: [x, y, radius, startAngle, endAngle, color], desc: "arc"}); console.log(`[Draw] arc at (${x},${y}) r=${radius} a=${startAngle}-${endAngle}`);
 
     ctx.beginPath(); ctx.arc(x, y, radius, startAngle, endAngle);
 
@@ -502,7 +504,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   window.drawEllipse = (x, y, radiusX, radiusY, color = currentColor) => {
 
-    saveSnapshot(); console.log(`[Draw] ellipse at (${x},${y}) rx=${radiusX} ry=${radiusY} color=${color}`);
+    saveSnapshot(); if (!_rebuilding) actionHistory.push({fn: "drawEllipse", args: [x, y, radiusX, radiusY, color], desc: "ellipse"}); console.log(`[Draw] ellipse at (${x},${y}) rx=${radiusX} ry=${radiusY} color=${color}`);
 
     ctx.beginPath(); ctx.ellipse(x, y, radiusX, radiusY, 0, 0, Math.PI * 2);
 
@@ -561,6 +563,8 @@ document.addEventListener("DOMContentLoaded", () => {
   // ── Graph Context (for AI editing/redrawing) ──────────
 
   const graphList = [];
+  var actionHistory = [];
+  var _rebuilding = false;  // true during rebuildCanvas, suppresses actionHistory push
   var lastTemplateName = "";
 
   const MAX_GRAPH_HISTORY = 10;
@@ -677,14 +681,274 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 
-  // ── Relative positioning: "在兔子左边画个乌龟" ──────────
-  const REL_DIR_MAP = {
-    "左边": { dx: -1, dy: 0 }, "左侧": { dx: -1, dy: 0 }, "左": { dx: -1, dy: 0 },
-    "右边": { dx: 1, dy: 0 }, "右侧": { dx: 1, dy: 0 }, "右": { dx: 1, dy: 0 },
-    "上边": { dx: 0, dy: -1 }, "上面": { dx: 0, dy: -1 }, "上方": { dx: 0, dy: -1 }, "上": { dx: 0, dy: -1 },
-    "下边": { dx: 0, dy: 1 }, "下面": { dx: 0, dy: 1 }, "下方": { dx: 0, dy: 1 }, "下": { dx: 0, dy: 1 },
-    "旁边": { dx: -1.5, dy: 0 }, "附近": { dx: -1.5, dy: -0.5 },
-  };
+  // ── Erase & Move: "擦掉兔子" / "把兔子移到右边" ──────────
+
+    function rebuildCanvas() {
+    _rebuilding = true;
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    graphList.length = 0;
+    var histCopy = actionHistory.slice();
+    for (var hi = 0; hi < histCopy.length; hi++) {
+      var entry = histCopy[hi];
+      var fn = window[entry.fn];
+      if (fn) fn.apply(null, entry.args);
+      if (entry.fn === "_batch_composite") {
+        var cname = (entry.desc || "").replace("tpl_composite:", "");
+        var cx = entry.args[0] || 400;
+        var cy = entry.args[1] || 300;
+        recordShape(cname, "tpl_composite:" + cname, cx, cy);
+      }
+    }
+    _rebuilding = false;
+  }
+
+  function getShapeActionIndices(keyword) {
+    // Find all actionHistory indices belonging to a shape matching keyword
+    // Match by checking graphList entries that contain the keyword
+    var indices = [];
+    for (var gi = 0; gi < graphList.length; gi++) {
+      var g = graphList[gi];
+      if (g.desc && g.desc.indexOf(keyword) >= 0) {
+        // Find matching actionHistory entries by checking if graphList entry
+        // was recorded during the same rendering batch
+        indices.push(gi);
+        continue;
+      }
+      if (g.shape && g.shape.indexOf(keyword) >= 0) {
+        indices.push(gi);
+        continue;
+      }
+    }
+    return indices;
+  }
+
+  function eraseShapeByKeyword(keyword) {
+    // Find shape batch marker in actionHistory
+    var markerIdx = -1;
+    var markerName = "";
+    for (var hi = 0; hi < actionHistory.length; hi++) {
+      var entry = actionHistory[hi];
+      if (entry.fn === "_batch_start") {
+        var desc = entry.desc || "";
+        if (desc.indexOf(keyword) >= 0 || desc.indexOf("tpl_start:") >= 0) {
+          markerIdx = hi;
+          markerName = desc.replace("tpl_start:", "");
+          break;
+        }
+      }
+    }
+
+    if (markerIdx < 0) {
+      // Fallback: try finding by graphList keyword match
+      var foundInGraph = false;
+      for (var gi = graphList.length - 1; gi >= 0; gi--) {
+        if (graphList[gi].desc && graphList[gi].desc.indexOf(keyword) >= 0) {
+          foundInGraph = true;
+          break;
+        }
+      }
+      if (!foundInGraph) {
+        speak("没找到" + keyword);
+        return false;
+      }
+      // If found in graph but no batch marker, it was drawn individually
+      // Remove from actionHistory by matching single entries
+      var removed = 0;
+      var newHist = [];
+      for (var hi = 0; hi < actionHistory.length; hi++) {
+        var entry = actionHistory[hi];
+        var desc = entry.desc || "";
+        if (desc.indexOf(keyword) >= 0) {
+          removed++;
+        } else {
+          newHist.push(entry);
+        }
+      }
+      if (removed === 0) {
+        speak("无法擦除" + keyword);
+        return false;
+      }
+      actionHistory = newHist;
+      saveSnapshot();
+      rebuildCanvas();
+      speak("已擦掉" + keyword);
+      return true;
+    }
+
+    // Remove all entries from markerIdx to the next marker or end
+    var nextMarker = -1;
+    for (var hi = markerIdx + 1; hi < actionHistory.length; hi++) {
+      if (actionHistory[hi].fn === "_batch_start") {
+        nextMarker = hi;
+        break;
+      }
+    }
+    var endIdx = nextMarker > 0 ? nextMarker : actionHistory.length;
+
+    // Also remove the composite graphList entry for this template
+    var newHistory = actionHistory.slice(0, markerIdx).concat(actionHistory.slice(endIdx));
+
+    var removedCount = endIdx - markerIdx;
+    if (removedCount <= 0) {
+      speak("无法擦除" + keyword);
+      return false;
+    }
+
+    actionHistory = newHistory;
+    saveSnapshot();
+    rebuildCanvas();
+    speak("已擦掉" + keyword);
+    return true;
+  }
+
+  function parseEraseMoveCommand(text) {
+    // Pattern 1: "擦掉兔子" / "删除乌龟" / "清除花"
+    var eraseMatch = text.match(/(?:擦掉|擦除|删除|删掉|移除|去掉)(.+)/);
+    if (eraseMatch) {
+      var target = eraseMatch[1].trim();
+      if (target) {
+        var ok = eraseShapeByKeyword(target);
+        return ok;
+      }
+    }
+
+    // Pattern 2: "把兔子移到右边" / "把乌龟移到左边" / "移动兔子到上面"
+    var moveMatch = text.match(/把(.+?)(?:移到|移动到|挪到|移至)(?:左边|右边|上边|下边|上面|下面|左侧|右侧|左|右|上|下)/);
+    if (!moveMatch) {
+      moveMatch = text.match(/(?:移到|移动到|挪动)(.+?)到(?:左边|右边|上边|下边|上面|下面|左侧|右侧|左|右|上|下)/);
+    }
+    if (!moveMatch) {
+      moveMatch = text.match(/(?:把|将)(.+?)(?:移到|移动到|挪到|移至)(.+?)(?:边|面|侧|方)/);
+    }
+    if (!moveMatch) {
+      // Simpler: "移动兔子到右边"
+      moveMatch = text.match(/移动(.+?)(?:到|至)(.+?)(?:边|面|侧|方)/);
+    }
+    if (moveMatch) {
+      var target = moveMatch[1].trim();
+      var dirText = text.match(/(?:左边|右边|上边|下边|上面|下面|左侧|右侧|左|右|上|下)/);
+      if (dirText) {
+        console.log("[Move] 目标=" + target + " 方向=" + dirText[0]);
+        return moveShapeByKeyword(target, dirText[0]);
+      }
+    }
+
+    return false;
+  }
+
+    function moveShapeByKeyword(keyword, direction) {
+    var dirMap = {
+      "左": {dx: -1, dy: 0}, "左边": {dx: -1, dy: 0}, "左侧": {dx: -1, dy: 0},
+      "右": {dx: 1, dy: 0}, "右边": {dx: 1, dy: 0}, "右侧": {dx: 1, dy: 0},
+      "上": {dx: 0, dy: -1}, "上边": {dx: 0, dy: -1}, "上面": {dx: 0, dy: -1}, "上方": {dx: 0, dy: -1},
+      "下": {dx: 0, dy: 1}, "下边": {dx: 0, dy: 1}, "下面": {dx: 0, dy: 1}, "下方": {dx: 0, dy: 1},
+    };
+    var dir = dirMap[direction];
+    if (!dir) return false;
+
+    // Find shape via _batch_start marker
+    var markerIdx = -1;
+    for (var hi = 0; hi < actionHistory.length; hi++) {
+      if (actionHistory[hi].fn === "_batch_start") {
+        var desc = actionHistory[hi].desc || "";
+        if (desc.indexOf(keyword) >= 0) {
+          markerIdx = hi;
+          break;
+        }
+      }
+    }
+
+    if (markerIdx < 0) {
+      // Fallback: find in graphList by keyword
+      var found = false;
+      for (var gi = graphList.length - 1; gi >= 0; gi--) {
+        if (graphList[gi].desc && graphList[gi].desc.indexOf(keyword) >= 0) {
+          found = true; break;
+        }
+      }
+      if (!found) { speak("没找到" + keyword); return false; }
+      // Try offsetting single actions by desc match
+      var step = 80;
+      var dx = Math.round(dir.dx * step);
+      var dy = Math.round(dir.dy * step);
+      var hit = false;
+      for (var hi = 0; hi < actionHistory.length; hi++) {
+        var entry = actionHistory[hi];
+        if ((entry.desc || "").indexOf(keyword) >= 0) {
+          var args = entry.args;
+          if (entry.fn === "drawCircle" || entry.fn === "drawArc") { if (args.length >= 2) { args[0] += dx; args[1] += dy; hit = true; } }
+          else if (entry.fn === "drawRect") { if (args.length >= 2) { args[0] += dx; args[1] += dy; hit = true; } }
+          else if (entry.fn === "drawEllipse") { if (args.length >= 2) { args[0] += dx; args[1] += dy; hit = true; } }
+          else if (entry.fn === "drawLine") { if (args.length >= 4) { args[0] += dx; args[1] += dy; args[2] += dx; args[3] += dy; hit = true; } }
+          else if (entry.fn === "drawPolygon") { if (args[0] && Array.isArray(args[0])) { args[0] = args[0].map(function(p) { return {x:p.x+dx, y:p.y+dy}; }); hit = true; } }
+        }
+      }
+      if (!hit) { speak("无法移动" + keyword); return false; }
+      saveSnapshot(); rebuildCanvas(); speak("已移动" + keyword); return true;
+    }
+
+    // Find next marker
+    var nextMarker = -1;
+    for (var hi = markerIdx + 1; hi < actionHistory.length; hi++) {
+      if (actionHistory[hi].fn === "_batch_start") { nextMarker = hi; break; }
+    }
+    var endIdx = nextMarker > 0 ? nextMarker : actionHistory.length;
+
+    // Calculate offset
+    var step = 80;
+    var dx = Math.round(dir.dx * step);
+    var dy = Math.round(dir.dy * step);
+
+    // Bounds check on the batch actions
+    var minX = 9999, maxX = 0, minY = 9999, maxY = 0;
+    for (var hi = markerIdx + 1; hi < endIdx; hi++) {
+      var entry = actionHistory[hi];
+      var args = entry.args;
+      if (entry.fn === "drawCircle") {
+        minX = Math.min(minX, args[0]-args[2]); maxX = Math.max(maxX, args[0]+args[2]);
+        minY = Math.min(minY, args[1]-args[2]); maxY = Math.max(maxY, args[1]+args[2]);
+      } else if (entry.fn === "drawRect") {
+        minX = Math.min(minX, args[0]); maxX = Math.max(maxX, args[0]+args[2]);
+        minY = Math.min(minY, args[1]); maxY = Math.max(maxY, args[1]+args[3]);
+      } else if (entry.fn === "drawLine") {
+        minX = Math.min(minX, args[0], args[2]); maxX = Math.max(maxX, args[0], args[2]);
+        minY = Math.min(minY, args[1], args[3]); maxY = Math.max(maxY, args[1], args[3]);
+      } else if (entry.fn === "drawPolygon" && args[0]) {
+        for (var pi = 0; pi < args[0].length; pi++) {
+          minX = Math.min(minX, args[0][pi].x); maxX = Math.max(maxX, args[0][pi].x);
+          minY = Math.min(minY, args[0][pi].y); maxY = Math.max(maxY, args[0][pi].y);
+        }
+      }
+    }
+    var margin = 20;
+    if (minX + dx < margin) dx = margin - minX;
+    if (maxX + dx > 800 - margin) dx = (800 - margin) - maxX;
+    if (minY + dy < margin) dy = margin - minY;
+    if (maxY + dy > 600 - margin) dy = (600 - margin) - maxY;
+    dx = Math.round(dx); dy = Math.round(dy);
+
+    // Offset all actions in the batch
+    for (var hi = markerIdx + 1; hi < endIdx; hi++) {
+      var entry = actionHistory[hi];
+      var args = entry.args;
+      if (entry.fn === "drawCircle" || entry.fn === "drawArc") { if (args.length >= 2) { args[0] += dx; args[1] += dy; } }
+      else if (entry.fn === "drawRect") { if (args.length >= 2) { args[0] += dx; args[1] += dy; } }
+      else if (entry.fn === "drawEllipse") { if (args.length >= 2) { args[0] += dx; args[1] += dy; } }
+      else if (entry.fn === "drawLine") { if (args.length >= 4) { args[0] += dx; args[1] += dy; args[2] += dx; args[3] += dy; } }
+      else if (entry.fn === "drawPolygon") { if (args[0] && Array.isArray(args[0])) { args[0] = args[0].map(function(p) { return {x:p.x+dx, y:p.y+dy}; }); } }
+    }
+
+    // Also update the composite graphList entry
+    for (var gi = 0; gi < graphList.length; gi++) {
+      if (graphList[gi].cx != null) { graphList[gi].cx += dx; graphList[gi].cy += dy; }
+    }
+
+    saveSnapshot();
+    rebuildCanvas();
+    speak("已将" + keyword + "移到" + direction);
+    return true;
+  }
 
   function offsetTemplateActions(actions, dx, dy) {
     return actions.map(function(a) {
@@ -752,7 +1016,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     if (!tplActions) {
-      console.log("[Relative] 找不到模板 " + targetName);
+      console.log("[Relative] no template for " + targetName);
       return null;
     }
 
@@ -945,6 +1209,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       saveSnapshot();
 
+      if (lastTemplateName) { actionHistory.push({fn: "_batch_start", args: [], desc: "tpl_start:" + lastTemplateName}); }
       for (const cmd of actions) {
 
         const c = cmd.color !== undefined ? cmd.color : currentColor;
@@ -1018,12 +1283,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
       speak(actions.length > 1 ? "绘制完成" : "完成");
       if (lastTemplateName) {
+        actionHistory.push({fn: "_batch_start", args: [], desc: "tpl_start:" + lastTemplateName});
         var _sx = 0, _sy = 0, _sc = 0;
         for (var _ri = 0; _ri < graphList.length; _ri++) {
           var _g = graphList[_ri];
           if (_g.cx != null) { _sx += _g.cx; _sy += _g.cy; _sc++; }
         }
-        if (_sc > 0) recordShape(lastTemplateName, "模板:" + lastTemplateName, Math.round(_sx/_sc), Math.round(_sy/_sc));
+        if (_sc > 0) {
+          var _bcx = Math.round(_sx/_sc), _bcy = Math.round(_sy/_sc);
+          actionHistory.push({fn: "_batch_composite", args: [_bcx, _bcy], desc: "tpl_composite:" + lastTemplateName});
+          recordShape(lastTemplateName, "tpl_composite:" + lastTemplateName, _bcx, _bcy);
+        }
         lastTemplateName = "";
       }
 
@@ -1505,6 +1775,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // AI or local mode
 
+      // Try erase/move first
+      var eraseMoveResult = parseEraseMoveCommand(lastFinal);
+      if (eraseMoveResult) {
+        setStatus(STATUS.SUCCESS, "完成 \u2713");
+        return;
+      }
+
       // Try relative positioning first
       var relResult = tryRelativePosition(lastFinal);
       if (relResult) {
@@ -1571,7 +1848,7 @@ document.addEventListener("DOMContentLoaded", () => {
           if (hasActions || hasIntent) {
 
             if (data.backend && data.backend.indexOf("template:") === 0) {
-              lastTemplateName = data.backend.replace("template:", "");
+              lastTemplateName = data.backend.replace("tpl_composite:", "");
             }
 
             const ok = executeAIResponse(data);
