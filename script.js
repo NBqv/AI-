@@ -1918,35 +1918,28 @@ document.addEventListener("DOMContentLoaded", () => {
     saveBtn.addEventListener(click, () => { if (typeof window.saveDrawing === "function") window.saveDrawing(); });
   }
 
-  // ── Quick tips ──────────────────────────────────────────
-  var tips = document.querySelectorAll(".tip");
-  for (var ti = 0; ti < tips.length; ti++) {
-    (function(tip) {
-      tip.addEventListener("click", function() {
-        var text = this.getAttribute("data-text");
-        if (text) {
-          var el = document.getElementById("recognizedText");
-          if (el) el.textContent = text;
-          // Try AI mode first, then local
-          if (aiMode) {
-            setStatus(STATUS.THINKING, "AI 思考中...");
-            parseWithAI(text).then(function(data) {
-              var hasActions = data && ((data.actions && data.actions.length > 0) || (data.commands && data.commands.length > 0));
-              var hasIntent = data && data.intent && data.intent !== "UNKNOWN";
-              if (hasActions || hasIntent) {
-                if (window.executeAIResponse) executeAIResponse(data);
-                setStatus(STATUS.SUCCESS, "完成 ✓");
-              } else {
-                parseLocal(text);
-              }
-            });
+  // ──   // ── Quick tips ──────────────────────────────────────────
+  document.querySelectorAll(".tip").forEach(function(tip) {
+    tip.addEventListener("click", function() {
+      var text = this.getAttribute("data-text") || "";
+      if (!text) return;
+      document.getElementById("recognizedText").textContent = text;
+      if (aiMode) {
+        setStatus(STATUS.THINKING, "AI 思考中...");
+        parseWithAI(text).then(function(data) {
+          var a = data && (data.actions || data.commands);
+          if (a && a.length > 0) {
+            executeAIResponse(data);
+            setStatus(STATUS.SUCCESS, "完成 ✓");
           } else {
             parseLocal(text);
           }
-        }
-      });
-    })(tips[ti]);
-  }
+        });
+      } else {
+        parseLocal(text);
+      }
+    });
+  });
 
   // ── AI Toggle ──────────────────────────────────────────
 
