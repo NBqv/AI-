@@ -2025,15 +2025,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (result.length <= 1) {
       var t = text;
       // Replace 还画/又画 with a unique split marker
-      t = t.replace(/还(?=画|绘)/g, "
-SPLIT
-");
-      t = t.replace(/又(?=画|绘)/g, "
-SPLIT
-");
-      var parts2 = t.split("
-SPLIT
-");
+      t = t.replace(/还(?=画|绘)/g, "\nSPLIT\n");
+      t = t.replace(/又(?=画|绘)/g, "\nSPLIT\n");
+      var parts2 = t.split("\nSPLIT\n");
       result = [];
       for (var pi = 0; pi < parts2.length; pi++) {
         var s = parts2[pi].trim();
