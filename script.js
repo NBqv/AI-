@@ -1484,6 +1484,8 @@ document.addEventListener("DOMContentLoaded", () => {
       for (const cmd of actions) {
 
         const c = cmd.color !== undefined ? cmd.color : currentColor;
+        var _ox = window._globalOffsetX || 0;
+        var _oy = window._globalOffsetY || 0;
 
         console.log(`[AI] 执行动作: ${cmd.action}`, cmd);
 
@@ -2047,7 +2049,9 @@ document.addEventListener("DOMContentLoaded", () => {
   }function executeActions(actions) {
     for (var _i = 0; _i < actions.length; _i++) {
       var cmd = actions[_i];
-      var _c = cmd.color !== undefined ? cmd.color : currentColor;
+      var _ox = window._globalOffsetX || 0;
+    var _oy = window._globalOffsetY || 0;
+    var _c = cmd.color !== undefined ? cmd.color : currentColor;
     var _ox = window._globalOffsetX || 0;
     var _oy = window._globalOffsetY || 0;
       var pts = cmd.points;
