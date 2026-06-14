@@ -561,17 +561,30 @@ document.addEventListener("DOMContentLoaded", () => {
   // ── Graph Context (for AI editing/redrawing) ──────────
 
   const graphList = [];
+  var lastTemplateName = "";
 
   const MAX_GRAPH_HISTORY = 10;
 
+  // Store loaded complex_shapes templates for local template operations
+  let templateDB = {};
 
+  // Store drawn shape name keyword -> canvas entry mapping
+  let shapeNameIndex = {};
 
-  function recordShape(shape, desc) {
-
-    graphList.push({ shape, desc });
-
+  function recordShape(shape, desc, cx, cy) {
+    const entry = { shape, desc, cx, cy };
+    graphList.push(entry);
     if (graphList.length > MAX_GRAPH_HISTORY) graphList.shift();
+  }
 
+  /** Find the most recent shape matching a name keyword in graphList */
+  function findShapeInCanvas(keyword) {
+    for (let i = graphList.length - 1; i >= 0; i--) {
+      const g = graphList[i];
+      if (g.desc && g.desc.includes(keyword)) return g;
+      if (g.cx != null) return g;
+    }
+    return null;
   }
 
 
@@ -596,7 +609,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     _origDrawCircle(...args);
 
-    recordShape("circle", `圆形(${args[0]},${args[1]}) r=${args[2]} 颜色${args[3]||currentColor}`);
+    recordShape("circle", `圆形(${args[0]},${args[1]}) r=${args[2]} 颜色${args[3]||currentColor}`, args[0], args[1]);
 
   };
 
@@ -606,7 +619,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     _origDrawEllipse(...args);
 
-    recordShape("ellipse", `椭圆(${args[0]},${args[1]}) rx=${args[2]} ry=${args[3]} 颜色${args[4]||currentColor}`);
+    recordShape("ellipse", `椭圆(${args[0]},${args[1]}) rx=${args[2]} ry=${args[3]} 颜色${args[4]||currentColor}`, args[0], args[1]);
 
   };
 
@@ -616,7 +629,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     _origDrawRect(...args);
 
-    recordShape("rect", `矩形(${args[0]},${args[1]}) ${args[2]}x${args[3]} 颜色${args[4]||currentColor}`);
+    recordShape("rect", `矩形(${args[0]},${args[1]}) ${args[2]}x${args[3]} 颜色${args[4]||currentColor}`, args[0] + args[2]/2, args[1] + args[3]/2);
 
   };
 
@@ -626,7 +639,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     _origDrawLine(...args);
 
-    recordShape("line", `线段从(${args[0]},${args[1]})到(${args[2]},${args[3]}) 颜色${args[4]||currentColor}`);
+    recordShape("line", `线段从(${args[0]},${args[1]})到(${args[2]},${args[3]}) 颜色${args[4]||currentColor}`, (args[0]+args[2])/2, (args[1]+args[3])/2);
 
   };
 
@@ -636,7 +649,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     _origDrawArc(...args);
 
-    recordShape("arc", `弧线(${args[0]},${args[1]}) r=${args[2]} 颜色${args[4]||currentColor}`);
+    recordShape("arc", `弧线(${args[0]},${args[1]}) r=${args[2]} 颜色${args[4]||currentColor}`, args[0], args[1]);
 
   };
 
@@ -652,7 +665,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const avgY = Math.round(points.reduce((s, p) => s + p.y, 0) / points.length);
 
-      recordShape("polygon", `多边形中心(${avgX},${avgY}) ${points.length}顶点 颜色${color||currentColor}`);
+      recordShape("polygon", `多边形中心(${avgX},${avgY}) ${points.length}顶点 颜色${color||currentColor}`, avgX, avgY);
 
     }
 
@@ -660,9 +673,97 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const _origClearCanvas = window.clearCanvas;
 
-  window.clearCanvas = () => { _origClearCanvas(); graphList.length = 0; };
+  window.clearCanvas = () => { _origClearCanvas(); graphList.length = 0; shapeNameIndex = {}; };
 
 
+
+  // ── Relative positioning: "在兔子左边画个乌龟" ──────────
+  const REL_DIR_MAP = {
+    "左边": { dx: -1, dy: 0 }, "左侧": { dx: -1, dy: 0 }, "左": { dx: -1, dy: 0 },
+    "右边": { dx: 1, dy: 0 }, "右侧": { dx: 1, dy: 0 }, "右": { dx: 1, dy: 0 },
+    "上边": { dx: 0, dy: -1 }, "上面": { dx: 0, dy: -1 }, "上方": { dx: 0, dy: -1 }, "上": { dx: 0, dy: -1 },
+    "下边": { dx: 0, dy: 1 }, "下面": { dx: 0, dy: 1 }, "下方": { dx: 0, dy: 1 }, "下": { dx: 0, dy: 1 },
+    "旁边": { dx: -1.5, dy: 0 }, "附近": { dx: -1.5, dy: -0.5 },
+  };
+
+  function offsetTemplateActions(actions, dx, dy) {
+    return actions.map(function(a) {
+      var na = JSON.parse(JSON.stringify(a));
+      if (na.x != null) na.x += dx;
+      if (na.y != null) na.y += dy;
+      if (na.x1 != null) na.x1 += dx;
+      if (na.y1 != null) na.y1 += dy;
+      if (na.x2 != null) na.x2 += dx;
+      if (na.y2 != null) na.y2 += dy;
+      if (na.points) {
+        na.points = na.points.map(function(p) { return { x: p.x + dx, y: p.y + dy }; });
+      }
+      return na;
+    });
+  }
+
+  function tryRelativePosition(text) {
+    var patterns = [
+      /在(.+?)(左边|右边|上边|下边|上面|下面|上方|下方|左侧|右侧|旁边|附近|左|右|上|下)画(?:个|一个|只|条|棵|朵|座|的)?(.+)/,
+      /在(.+?)的(左边|右边|上边|下边|上面|下面|左侧|右侧|旁边|附近|左|右|上|下)画(?:个|一个|只|条|棵|朵|座|的)?(.+)/,
+    ];
+    var match = null;
+    for (var pi = 0; pi < patterns.length; pi++) {
+      match = text.match(patterns[pi]);
+      if (match) break;
+    }
+    if (!match) return null;
+
+    var refName = match[1].trim();
+    var dirKey = match[2].trim();
+    var targetName = match[3].trim();
+
+    console.log("[Relative] 参照=" + refName + " 方向=" + dirKey + " 目标=" + targetName);
+
+    var refShape = findShapeInCanvas(refName);
+    if (!refShape || refShape.cx == null) {
+      console.log("[Relative] 找不到参考物 " + refName + " 在画布上");
+      return null;
+    }
+
+    var dir = REL_DIR_MAP[dirKey];
+    if (!dir) return null;
+
+    var tplName = null;
+    var tplActions = null;
+    var keys = Object.keys(templateDB);
+    for (var ki = 0; ki < keys.length; ki++) {
+      var name = keys[ki];
+      var tpl = templateDB[name];
+      if (name === targetName || name.indexOf(targetName) >= 0 || targetName.indexOf(name) >= 0) {
+        tplName = name;
+        tplActions = tpl.actions;
+        break;
+      }
+      for (var ai = 0; ai < (tpl.aliases || []).length; ai++) {
+        var alias = tpl.aliases[ai];
+        if (alias === targetName || targetName.indexOf(alias) >= 0 || alias.indexOf(targetName) >= 0) {
+          tplName = name;
+          tplActions = tpl.actions;
+          break;
+        }
+      }
+      if (tplName) break;
+    }
+
+    if (!tplActions) {
+      console.log("[Relative] 找不到模板 " + targetName);
+      return null;
+    }
+
+    var gap = 140;
+    var offsetX = Math.round(refShape.cx + dir.dx * gap - 400);
+    var offsetY = Math.round(refShape.cy + dir.dy * gap - 300);
+
+    var shifted = offsetTemplateActions(tplActions, offsetX, offsetY);
+    console.log("[Relative] 偏移: dx=" + offsetX + " dy=" + offsetY + " -> " + tplName);
+    return { actions: shifted, name: tplName };
+  }
 
   // ── AI Backend Service ─────────────────────────────────
 
@@ -755,6 +856,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
       console.log(`[Aliases] colorMap:${Object.keys(data.color).length} shapeMap:${Object.keys(data.shape).length} position_absolute:${data.position_absolute.length}`);
+
+      // Load complex_shapes templates for local relative positioning
+      if (data.complex_shapes) {
+        templateDB = data.complex_shapes;
+        console.log(`[Aliases] Loaded ${Object.keys(templateDB).length} templates`);
+      }
 
     } catch (_) {
 
@@ -910,6 +1017,15 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       speak(actions.length > 1 ? "绘制完成" : "完成");
+      if (lastTemplateName) {
+        var _sx = 0, _sy = 0, _sc = 0;
+        for (var _ri = 0; _ri < graphList.length; _ri++) {
+          var _g = graphList[_ri];
+          if (_g.cx != null) { _sx += _g.cx; _sy += _g.cy; _sc++; }
+        }
+        if (_sc > 0) recordShape(lastTemplateName, "模板:" + lastTemplateName, Math.round(_sx/_sc), Math.round(_sy/_sc));
+        lastTemplateName = "";
+      }
 
       return true;
 
@@ -1389,6 +1505,53 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // AI or local mode
 
+      // Try relative positioning first
+      var relResult = tryRelativePosition(lastFinal);
+      if (relResult) {
+        console.log("[Relative] 命中: " + relResult.name);
+        setStatus(STATUS.DRAWING, "相对位置绘图...");
+        saveSnapshot();
+        var _actions = relResult.actions;
+        for (var _i = 0; _i < _actions.length; _i++) {
+          var cmd = _actions[_i];
+          var _c = cmd.color !== undefined ? cmd.color : currentColor;
+          var pts = cmd.points;
+          if (pts && pts.length > 0 && Array.isArray(pts[0])) {
+            pts = pts.map(function(p) { return Array.isArray(p) ? {x: p[0], y: p[1]} : p; });
+          }
+          (function(cmd, _c, pts) {
+            switch (cmd.action) {
+              case "drawCircle":
+                if (cmd.radiusX !== undefined || cmd.radiusY !== undefined) {
+                  drawEllipse(cmd.x || 400, cmd.y || 300, cmd.radiusX || cmd.radius || 40, cmd.radiusY || cmd.radius || 40, _c);
+                } else {
+                  drawCircle(cmd.x || 400, cmd.y || 300, cmd.radius || currentRadius, _c);
+                }
+                break;
+              case "drawEllipse": drawEllipse(cmd.x || 400, cmd.y || 300, cmd.radiusX || 50, cmd.radiusY || 30, _c); break;
+              case "drawRect": drawRect(cmd.x || 300, cmd.y || 200, cmd.width || 80, cmd.height || 60, _c); break;
+              case "drawLine": drawLine(cmd.x1 || 200, cmd.y1 || 300, cmd.x2 || 600, cmd.y2 || 300, _c); break;
+              case "drawPolygon": case "drawTriangle": if (pts) drawPolygon(pts, _c); break;
+              case "drawArc": drawArc(cmd.x || 400, cmd.y || 300, cmd.radius || 40, cmd.startAngle || 0, cmd.endAngle || 3.14159, _c); break;
+              case "drawStar":
+                if (pts) { drawPolygon(pts, _c); break; }
+                var cx = cmd.x || 400, cy = cmd.y || 300, r = cmd.radius || 40;
+                var starPts = [];
+                for (var si = 0; si < 10; si++) {
+                  var angle = (si * Math.PI * 2) / 10 - Math.PI / 2;
+                  var rad = si % 2 === 0 ? r : r * 0.4;
+                  starPts.push({ x: cx + rad * Math.cos(angle), y: cy + rad * Math.sin(angle) });
+                }
+                drawPolygon(starPts, _c);
+                break;
+            }
+          })(cmd, _c, pts);
+        }
+        speak("在" + relResult.name + "旁边画好了");
+        setStatus(STATUS.SUCCESS, "完成 ✓");
+        return;
+      }
+
       if (aiMode) {
 
         console.log(`[Step 2] 发送AI: "${lastFinal}"`);
@@ -1406,6 +1569,10 @@ document.addEventListener("DOMContentLoaded", () => {
           const hasIntent = data && data.intent && data.intent !== "UNKNOWN";
 
           if (hasActions || hasIntent) {
+
+            if (data.backend && data.backend.indexOf("template:") === 0) {
+              lastTemplateName = data.backend.replace("template:", "");
+            }
 
             const ok = executeAIResponse(data);
 

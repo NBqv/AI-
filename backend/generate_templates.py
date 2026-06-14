@@ -14,7 +14,7 @@ from pathlib import Path
 # -- 配置 --
 API_KEY = os.environ.get("DASHSCOPE_API_KEY", "")
 BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-MODEL = "qwen-plus"
+MODEL = "qwen-max"
 ALIASES_PATH = Path(__file__).parent / "aliases.json"
 
 # -- 分类模板列表（按优先级分批生成） --
