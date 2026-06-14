@@ -435,6 +435,7 @@ document.addEventListener("DOMContentLoaded", () => {
   window.drawCircle = (x, y, radius = currentRadius, color = currentColor) => {
 
     saveSnapshot();
+    if (!_rebuilding)
     actionHistory.push({fn: "drawCircle", args: [x, y, radius, color], desc: "圆形("+x+","+y+") r="+radius});
 
     console.log(`[Draw] circle at (${x},${y}) radius=${radius} color=${color}`);
@@ -447,13 +448,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 
-  window.clearCanvas = () => { saveSnapshot(); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height); actionHistory = []; };
+  window.clearCanvas = () => { saveSnapshot(); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height); if (!_rebuilding) actionHistory = []; };
 
 
 
   window.drawRect = (x = 300, y = 200, width = 100, height = 80, color = currentColor) => {
 
-    saveSnapshot(); console.log(`[Draw] rect at (${x},${y}) ${width}x${height} color=${color}`);
+    saveSnapshot(); if (!_rebuilding) actionHistory.push({fn: "drawRect", args: [x, y, width, height, color], desc: "rect"}); console.log(`[Draw] rect at (${x},${y}) ${width}x${height} color=${color}`);
 
     ctx.fillStyle = color; ctx.fillRect(x, y, width, height);
 
@@ -463,7 +464,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   window.drawLine = (x1 = 200, y1 = 300, x2 = 600, y2 = 300, color = currentColor) => {
 
-    saveSnapshot(); console.log(`[Draw] line from (${x1},${y1}) to (${x2},${y2}) color=${color}`);
+    saveSnapshot(); if (!_rebuilding) actionHistory.push({fn: "drawLine", args: [x1, y1, x2, y2, color], desc: "line"}); console.log(`[Draw] line from (${x1},${y1}) to (${x2},${y2}) color=${color}`);
 
     ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
 
@@ -477,7 +478,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (!points || points.length < 3) return;
 
-    saveSnapshot(); console.log(`[Draw] polygon ${points.length} pts color=${color}`);
+    saveSnapshot(); if (!_rebuilding) actionHistory.push({fn: "drawPolygon", args: [points, color], desc: "poly"}); console.log(`[Draw] polygon ${points.length} pts color=${color}`);
 
     ctx.beginPath(); ctx.moveTo(points[0].x, points[0].y);
 
@@ -491,7 +492,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   window.drawArc = (x, y, radius, startAngle = 0, endAngle = Math.PI, color = currentColor) => {
 
-    saveSnapshot(); console.log(`[Draw] arc at (${x},${y}) r=${radius} a=${startAngle}-${endAngle}`);
+    saveSnapshot(); if (!_rebuilding) actionHistory.push({fn: "drawArc", args: [x, y, radius, startAngle, endAngle, color], desc: "arc"}); console.log(`[Draw] arc at (${x},${y}) r=${radius} a=${startAngle}-${endAngle}`);
 
     ctx.beginPath(); ctx.arc(x, y, radius, startAngle, endAngle);
 
@@ -503,7 +504,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   window.drawEllipse = (x, y, radiusX, radiusY, color = currentColor) => {
 
-    saveSnapshot(); console.log(`[Draw] ellipse at (${x},${y}) rx=${radiusX} ry=${radiusY} color=${color}`);
+    saveSnapshot(); if (!_rebuilding) actionHistory.push({fn: "drawEllipse", args: [x, y, radiusX, radiusY, color], desc: "ellipse"}); console.log(`[Draw] ellipse at (${x},${y}) rx=${radiusX} ry=${radiusY} color=${color}`);
 
     ctx.beginPath(); ctx.ellipse(x, y, radiusX, radiusY, 0, 0, Math.PI * 2);
 
@@ -562,7 +563,8 @@ document.addEventListener("DOMContentLoaded", () => {
   // ── Graph Context (for AI editing/redrawing) ──────────
 
   const graphList = [];
-  var actionHistory = [];  // stores {fn: Function, args: Array, desc: String}
+  var actionHistory = [];
+  var _rebuilding = false;  // true during rebuildCanvas, suppresses actionHistory push
   var lastTemplateName = "";
 
   const MAX_GRAPH_HISTORY = 10;
@@ -682,11 +684,13 @@ document.addEventListener("DOMContentLoaded", () => {
   // ── Erase & Move: "擦掉兔子" / "把兔子移到右边" ──────────
 
     function rebuildCanvas() {
+    _rebuilding = true;
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     graphList.length = 0;
-    for (var hi = 0; hi < actionHistory.length; hi++) {
-      var entry = actionHistory[hi];
+    var histCopy = actionHistory.slice();
+    for (var hi = 0; hi < histCopy.length; hi++) {
+      var entry = histCopy[hi];
       var fn = window[entry.fn];
       if (fn) fn.apply(null, entry.args);
       if (entry.fn === "_batch_composite") {
@@ -696,6 +700,7 @@ document.addEventListener("DOMContentLoaded", () => {
         recordShape(cname, "tpl_composite:" + cname, cx, cy);
       }
     }
+    _rebuilding = false;
   }
 
   function getShapeActionIndices(keyword) {
