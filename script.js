@@ -1909,16 +1909,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ── Utility buttons ────────────────────────────────────
   if (undoBtn) {
-    undoBtn.addEventListener(click, () => { if (typeof window.undo === "function") window.undo(); });
+    undoBtn.addEventListener("click", () => { if (typeof window.undo === "function") window.undo(); });
   }
   if (clearBtn) {
-    clearBtn.addEventListener(click, () => { if (typeof window.clearCanvas === "function") window.clearCanvas(); speak("已清空"); });
+    clearBtn.addEventListener("click", () => { if (typeof window.clearCanvas === "function") window.clearCanvas(); speak("已清空"); });
   }
   if (saveBtn) {
-    saveBtn.addEventListener(click, () => { if (typeof window.saveDrawing === "function") window.saveDrawing(); });
+    saveBtn.addEventListener("click", () => { if (typeof window.saveDrawing === "function") window.saveDrawing(); });
   }
 
-  // ──   // ── Quick tips ──────────────────────────────────────────
+  // ── Quick tips ──────────────────────────────────────────
   document.querySelectorAll(".tip").forEach(function(tip) {
     tip.addEventListener("click", function() {
       var text = this.getAttribute("data-text") || "";
