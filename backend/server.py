@@ -355,8 +355,38 @@ def inference_local(text: str, context: str = "") -> ParseResponse:
 #  Router
 # ═══════════════════════════════════════════════════════════
 
+# Build alias→name lookup for template matching
+template_aliases = {}
+for name, data in aliases.get("complex_shapes", {}).items():
+    for alias in data.get("aliases", []):
+        template_aliases[alias] = (name, data["actions"])
+
+
+def match_template(text: str) -> Optional[ParseResponse]:
+    """Check if user text matches a complex shape template. Returns template if found."""
+    best_name = None
+    best_actions = None
+    best_len = 0
+    for alias, (name, actions) in template_aliases.items():
+        if alias in text and len(alias) > best_len:
+            best_name = name
+            best_actions = actions
+            best_len = len(alias)
+    if best_actions:
+        print(f"[Template] matched \"{text}\" -> {best_name}")
+        return ParseResponse(
+            intent="", actions=[Command(**a) if isinstance(a, dict) else a for a in best_actions],
+            raw_text=text, backend=f"template:{best_name}")
+    return None
+
+
 def parse_text(text: str, context: str = "") -> ParseResponse:
-    """Route to the appropriate backend."""
+    """Route to the appropriate backend. Templates take priority."""
+
+    # ── Template match (always first, regardless of context) ──
+    template = match_template(text)
+    if template:
+        return template
 
     if BACKEND == "ollama":
         if not check_ollama():
