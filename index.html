@@ -2,23 +2,43 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Voice Draw</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Voice Draw — 语音画画</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div id="app">
-    <h1>Voice Draw</h1>
+    <h1><span class="voice-icon">🎨</span> 语音画画</h1>
+    <div id="subtitle">说出你想画的，我来帮你画</div>
+
     <div id="toolbar">
-      <button id="recordBtn">🎤 开始语音</button>
+      <button id="recordBtn">🎤 开始说话</button>
       <button id="aiToggle" class="btn-secondary">🧠 本地模式</button>
+      <button id="undoBtn" class="btn-secondary" title="撤销">↩️</button>
+      <button id="clearBtn" class="btn-secondary" title="清空">🗑️</button>
+      <button id="saveBtn" class="btn-secondary" title="保存">💾</button>
     </div>
-    <canvas id="canvas" width="800" height="600"></canvas>
-    <div id="status-container">
+
+    <div id="canvas-wrap">
+      <canvas id="canvas" width="800" height="600"></canvas>
+    </div>
+
+    <div id="status-bar">
       <span id="status-dot" class="dot-idle"></span>
-      <span id="status-label">等待语音</span>
+      <span id="status-label">准备就绪</span>
     </div>
+
     <div id="recognizedText"></div>
+
+    <div id="tips">
+      <span class="tip" data-text="画个小猫">🐱 小猫</span>
+      <span class="tip" data-text="画个狗狗">🐶 小狗</span>
+      <span class="tip" data-text="画个房子">🏠 房子</span>
+      <span class="tip" data-text="画太阳">☀️ 太阳</span>
+      <span class="tip" data-text="画个汽车">🚗 汽车</span>
+      <span class="tip" data-text="画个花">🌸 花</span>
+      <span class="tip" data-text="画个恐龙">🦕 恐龙</span>
+    </div>
   </div>
   <script src="script.js"></script>
 </body>

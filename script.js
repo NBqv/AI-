@@ -1297,6 +1297,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const AI_API = "http://localhost:8080";
 
   let aiMode = false;
+  window.aiMode = aiMode;
 
 
 
@@ -1906,6 +1907,47 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 
+  // ── Utility buttons ────────────────────────────────────
+  if (undoBtn) {
+    undoBtn.addEventListener(click, () => { if (typeof window.undo === "function") window.undo(); });
+  }
+  if (clearBtn) {
+    clearBtn.addEventListener(click, () => { if (typeof window.clearCanvas === "function") window.clearCanvas(); speak("已清空"); });
+  }
+  if (saveBtn) {
+    saveBtn.addEventListener(click, () => { if (typeof window.saveDrawing === "function") window.saveDrawing(); });
+  }
+
+  // ── Quick tips ──────────────────────────────────────────
+  var tips = document.querySelectorAll(".tip");
+  for (var ti = 0; ti < tips.length; ti++) {
+    (function(tip) {
+      tip.addEventListener("click", function() {
+        var text = this.getAttribute("data-text");
+        if (text) {
+          var el = document.getElementById("recognizedText");
+          if (el) el.textContent = text;
+          // Try AI mode first, then local
+          if (aiMode) {
+            setStatus(STATUS.THINKING, "AI 思考中...");
+            parseWithAI(text).then(function(data) {
+              var hasActions = data && ((data.actions && data.actions.length > 0) || (data.commands && data.commands.length > 0));
+              var hasIntent = data && data.intent && data.intent !== "UNKNOWN";
+              if (hasActions || hasIntent) {
+                if (window.executeAIResponse) executeAIResponse(data);
+                setStatus(STATUS.SUCCESS, "完成 ✓");
+              } else {
+                parseLocal(text);
+              }
+            });
+          } else {
+            parseLocal(text);
+          }
+        }
+      });
+    })(tips[ti]);
+  }
+
   // ── AI Toggle ──────────────────────────────────────────
 
   if (aiToggle) {
@@ -2138,7 +2180,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         recordBtn.disabled = false;
 
-        recordBtn.textContent = "🎤 开始语音";
+        recordBtn.textContent = "🎤 开始说话"; recordBtn.classList.remove("recording");
 
       }
 
@@ -2148,9 +2190,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     recognition.onend = () => {
 
-      if (recordBtn.textContent === "⏹ 停止录音") recognition.start();
+      if (recordBtn.textContent === "⏹ 停止") recognition.start();
 
-      else { recordBtn.disabled = false; recordBtn.textContent = "🎤 开始语音"; }
+      else { recordBtn.disabled = false; recordBtn.textContent = "🎤 开始说话"; recordBtn.classList.remove("recording"); }
 
     };
 
@@ -2158,11 +2200,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     recordBtn.addEventListener("click", () => {
 
-      if (recordBtn.textContent === "🎤 开始语音") {
+      if (recordBtn.textContent === "🎤 开始说话") {
 
         recognition.start();
 
-        recordBtn.textContent = "⏹ 停止录音";
+        recordBtn.textContent = "⏹ 停止"; recordBtn.classList.add("recording");
 
         setStatus(STATUS.LISTENING, "正在聆听...");
 
@@ -2170,7 +2212,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         recognition.stop();
 
-        recordBtn.textContent = "🎤 开始语音";
+        recordBtn.textContent = "🎤 开始说话"; recordBtn.classList.remove("recording");
 
         setStatus(STATUS.IDLE, "已停止");
 
