@@ -435,6 +435,7 @@ document.addEventListener("DOMContentLoaded", () => {
   window.drawCircle = (x, y, radius = currentRadius, color = currentColor) => {
 
     saveSnapshot();
+    actionHistory.push({fn: "drawCircle", args: [x, y, radius, color], desc: "圆形("+x+","+y+") r="+radius});
 
     console.log(`[Draw] circle at (${x},${y}) radius=${radius} color=${color}`);
 
@@ -446,7 +447,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 
-  window.clearCanvas = () => { saveSnapshot(); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height); };
+  window.clearCanvas = () => { saveSnapshot(); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height); actionHistory = []; };
 
 
 
@@ -561,6 +562,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // ── Graph Context (for AI editing/redrawing) ──────────
 
   const graphList = [];
+  var actionHistory = [];  // stores {fn: Function, args: Array, desc: String}
   var lastTemplateName = "";
 
   const MAX_GRAPH_HISTORY = 10;
@@ -676,6 +678,224 @@ document.addEventListener("DOMContentLoaded", () => {
   window.clearCanvas = () => { _origClearCanvas(); graphList.length = 0; shapeNameIndex = {}; };
 
 
+
+  // ── Erase & Move: "擦掉兔子" / "把兔子移到右边" ──────────
+
+  function rebuildCanvas() {
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    graphList.length = 0;
+    for (var hi = 0; hi < actionHistory.length; hi++) {
+      var entry = actionHistory[hi];
+      var fn = window[entry.fn];
+      if (fn) fn.apply(null, entry.args);
+    }
+  }
+
+  function getShapeActionIndices(keyword) {
+    // Find all actionHistory indices belonging to a shape matching keyword
+    // Match by checking graphList entries that contain the keyword
+    var indices = [];
+    for (var gi = 0; gi < graphList.length; gi++) {
+      var g = graphList[gi];
+      if (g.desc && g.desc.indexOf(keyword) >= 0) {
+        // Find matching actionHistory entries by checking if graphList entry
+        // was recorded during the same rendering batch
+        indices.push(gi);
+        continue;
+      }
+      if (g.shape && g.shape.indexOf(keyword) >= 0) {
+        indices.push(gi);
+        continue;
+      }
+    }
+    return indices;
+  }
+
+  function eraseShapeByKeyword(keyword) {
+    // Find shape batch marker in actionHistory
+    var markerIdx = -1;
+    var markerName = "";
+    for (var hi = 0; hi < actionHistory.length; hi++) {
+      var entry = actionHistory[hi];
+      if (entry.fn === "_batch_start") {
+        var desc = entry.desc || "";
+        if (desc.indexOf(keyword) >= 0 || desc.indexOf("模板开始:") >= 0) {
+          markerIdx = hi;
+          markerName = desc.replace("模板开始:", "");
+          break;
+        }
+      }
+    }
+
+    if (markerIdx < 0) {
+      // Fallback: try finding by graphList keyword match
+      var foundInGraph = false;
+      for (var gi = graphList.length - 1; gi >= 0; gi--) {
+        if (graphList[gi].desc && graphList[gi].desc.indexOf(keyword) >= 0) {
+          foundInGraph = true;
+          break;
+        }
+      }
+      if (!foundInGraph) {
+        speak("没找到" + keyword);
+        return false;
+      }
+      // If found in graph but no batch marker, it was drawn individually
+      // Remove from actionHistory by matching single entries
+      var removed = 0;
+      var newHist = [];
+      for (var hi = 0; hi < actionHistory.length; hi++) {
+        var entry = actionHistory[hi];
+        var desc = entry.desc || "";
+        if (desc.indexOf(keyword) >= 0) {
+          removed++;
+        } else {
+          newHist.push(entry);
+        }
+      }
+      if (removed === 0) {
+        speak("无法擦除" + keyword);
+        return false;
+      }
+      actionHistory = newHist;
+      saveSnapshot();
+      rebuildCanvas();
+      speak("已擦掉" + keyword);
+      return true;
+    }
+
+    // Remove all entries from markerIdx to the next marker or end
+    var nextMarker = -1;
+    for (var hi = markerIdx + 1; hi < actionHistory.length; hi++) {
+      if (actionHistory[hi].fn === "_batch_start") {
+        nextMarker = hi;
+        break;
+      }
+    }
+    var endIdx = nextMarker > 0 ? nextMarker : actionHistory.length;
+
+    // Also remove the composite graphList entry for this template
+    var newHistory = actionHistory.slice(0, markerIdx).concat(actionHistory.slice(endIdx));
+
+    var removedCount = endIdx - markerIdx;
+    if (removedCount <= 0) {
+      speak("无法擦除" + keyword);
+      return false;
+    }
+
+    actionHistory = newHistory;
+    saveSnapshot();
+    rebuildCanvas();
+    speak("已擦掉" + keyword);
+    return true;
+  }
+
+  function parseEraseMoveCommand(text) {
+    // Pattern 1: "擦掉兔子" / "删除乌龟" / "清除花"
+    var eraseMatch = text.match(/(?:擦掉|擦除|删除|删掉|移除|去掉)(.+)/);
+    if (eraseMatch) {
+      var target = eraseMatch[1].trim();
+      if (target) {
+        var ok = eraseShapeByKeyword(target);
+        return ok;
+      }
+    }
+
+    // Pattern 2: "把兔子移到右边" / "把乌龟移到左边" / "移动兔子到上面"
+    var moveMatch = text.match(/把(.+?)(?:移到|移动到|挪到|移至)(?:左边|右边|上边|下边|上面|下面|左侧|右侧|左|右|上|下)/);
+    if (!moveMatch) {
+      moveMatch = text.match(/(?:移到|移动到|挪动)(.+?)到(?:左边|右边|上边|下边|上面|下面|左侧|右侧|左|右|上|下)/);
+    }
+    if (!moveMatch) {
+      moveMatch = text.match(/(?:把|将)(.+?)(?:移到|移动到|挪到|移至)(.+?)(?:边|面|侧|方)/);
+    }
+    if (!moveMatch) {
+      // Simpler: "移动兔子到右边"
+      moveMatch = text.match(/移动(.+?)(?:到|至)(.+?)(?:边|面|侧|方)/);
+    }
+    if (moveMatch) {
+      var target = moveMatch[1].trim();
+      var dirText = text.match(/(?:左边|右边|上边|下边|上面|下面|左侧|右侧|左|右|上|下)/);
+      if (dirText) {
+        console.log("[Move] 目标=" + target + " 方向=" + dirText[0]);
+        return moveShapeByKeyword(target, dirText[0]);
+      }
+    }
+
+    return false;
+  }
+
+  function moveShapeByKeyword(keyword, direction) {
+    var dirMap = {
+      "左": {dx: -1, dy: 0}, "左边": {dx: -1, dy: 0}, "左侧": {dx: -1, dy: 0},
+      "右": {dx: 1, dy: 0}, "右边": {dx: 1, dy: 0}, "右侧": {dx: 1, dy: 0},
+      "上": {dx: 0, dy: -1}, "上边": {dx: 0, dy: -1}, "上面": {dx: 0, dy: -1}, "上方": {dx: 0, dy: -1},
+      "下": {dx: 0, dy: 1}, "下边": {dx: 0, dy: 1}, "下面": {dx: 0, dy: 1}, "下方": {dx: 0, dy: 1},
+    };
+    var dir = dirMap[direction];
+    if (!dir) return false;
+
+    // Find the shape
+    var targetIdx = -1;
+    for (var gi = graphList.length - 1; gi >= 0; gi--) {
+      if (graphList[gi].desc && graphList[gi].desc.indexOf(keyword) >= 0) {
+        targetIdx = gi;
+        break;
+      }
+    }
+    if (targetIdx < 0) {
+      speak("没找到" + keyword);
+      return false;
+    }
+
+    var step = 120;
+    var dx = Math.round(dir.dx * step);
+    var dy = Math.round(dir.dy * step);
+
+    // Modify actionHistory: find actions belonging to this shape and offset coords
+    var found = false;
+    for (var hi = 0; hi < actionHistory.length; hi++) {
+      var entry = actionHistory[hi];
+      // Check if this entry's args contain coordinates and it's part of the target shape
+      // Simple heuristic: if the entry was recorded during the same batch as the target
+      var shouldOffset = false;
+      if (keyword.length >= 2) {
+        // Try matching by checking if any graphList entry with this keyword
+        // roughly corresponds to this action
+        var desc = entry.desc || "";
+        if (desc.indexOf(keyword) >= 0) shouldOffset = true;
+      }
+
+      if (shouldOffset) {
+        var args = entry.args;
+        if (entry.fn === "drawCircle" || entry.fn === "drawArc") {
+          if (args.length >= 2) { args[0] += dx; args[1] += dy; }
+        } else if (entry.fn === "drawRect") {
+          if (args.length >= 2) { args[0] += dx; args[1] += dy; }
+        } else if (entry.fn === "drawLine") {
+          if (args.length >= 4) { args[0] += dx; args[1] += dy; args[2] += dx; args[3] += dy; }
+        } else if (entry.fn === "drawEllipse") {
+          if (args.length >= 2) { args[0] += dx; args[1] += dy; }
+        } else if (entry.fn === "drawPolygon") {
+          if (args[0] && Array.isArray(args[0])) {
+            args[0] = args[0].map(function(p) { return {x: p.x + dx, y: p.y + dy}; });
+          }
+        }
+        found = true;
+      }
+    }
+
+    if (!found) {
+      speak("无法移动" + keyword);
+      return false;
+    }
+
+    saveSnapshot();
+    rebuildCanvas();
+    speak("已将" + keyword + "移到" + direction);
+    return true;
+  }
 
   // ── Relative positioning: "在兔子左边画个乌龟" ──────────
   const REL_DIR_MAP = {
@@ -1018,6 +1238,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       speak(actions.length > 1 ? "绘制完成" : "完成");
       if (lastTemplateName) {
+        actionHistory.push({fn: "_batch_start", args: [], desc: "模板开始:" + lastTemplateName});
         var _sx = 0, _sy = 0, _sc = 0;
         for (var _ri = 0; _ri < graphList.length; _ri++) {
           var _g = graphList[_ri];
@@ -1504,6 +1725,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
       // AI or local mode
+
+      // Try erase/move first
+      var eraseMoveResult = parseEraseMoveCommand(lastFinal);
+      if (eraseMoveResult) {
+        setStatus(STATUS.SUCCESS, "完成 \u2713");
+        return;
+      }
 
       // Try relative positioning first
       var relResult = tryRelativePosition(lastFinal);
