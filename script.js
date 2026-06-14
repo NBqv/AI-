@@ -1484,6 +1484,8 @@ document.addEventListener("DOMContentLoaded", () => {
       for (const cmd of actions) {
 
         const c = cmd.color !== undefined ? cmd.color : currentColor;
+        var _ox = window._globalOffsetX || 0;
+        var _oy = window._globalOffsetY || 0;
 
         console.log(`[AI] 执行动作: ${cmd.action}`, cmd);
 
@@ -1507,11 +1509,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
             if (cmd.radiusX !== undefined || cmd.radiusY !== undefined) {
 
-              drawEllipse(cmd.x ?? 400, cmd.y ?? 300, cmd.radiusX ?? cmd.radius ?? 40, cmd.radiusY ?? cmd.radius ?? 40, c);
+              drawEllipse((cmd.x ?? 400) + _ox, (cmd.y ?? 300) + _oy, cmd.radiusX ?? cmd.radius ?? 40, cmd.radiusY ?? cmd.radius ?? 40, c);
 
             } else {
 
-              drawCircle(cmd.x ?? 400, cmd.y ?? 300, cmd.radius ?? currentRadius, c);
+              drawCircle((cmd.x ?? 400) + _ox, (cmd.y ?? 300) + _oy, cmd.radius ?? currentRadius, c);
 
             }
 
@@ -1523,9 +1525,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
             break;
 
-          case "drawRect": drawRect(cmd.x ?? 300, cmd.y ?? 200, cmd.width ?? 80, cmd.height ?? 60, c); break;
+          case "drawRect": drawRect((cmd.x ?? 300) + _ox, (cmd.y ?? 200) + _oy, cmd.width ?? 80, cmd.height ?? 60, c); break;
 
-          case "drawLine": drawLine(cmd.x1 ?? 200, cmd.y1 ?? 300, cmd.x2 ?? 600, cmd.y2 ?? 300, c); break;
+          case "drawLine": drawLine((cmd.x1 ?? 200) + _ox, (cmd.y1 ?? 300) + _oy, (cmd.x2 ?? 600) + _ox, (cmd.y2 ?? 300) + _oy, c); break;
 
           case "drawPolygon": case "drawTriangle": case "drawStar":
             if (pts) { drawPolygon(pts, c); break; }
@@ -1540,7 +1542,7 @@ document.addEventListener("DOMContentLoaded", () => {
               drawPolygon(starPts, c);
               break;
             }
-          case "drawArc": drawArc(cmd.x ?? 400, cmd.y ?? 300, cmd.radius ?? 40, cmd.startAngle ?? 0, cmd.endAngle ?? Math.PI, c); break;
+          case "drawArc": drawArc((cmd.x ?? 400) + _ox, (cmd.y ?? 300) + _oy, cmd.radius ?? 40, cmd.startAngle ?? 0, cmd.endAngle ?? Math.PI, c); break;
 
           case "setColor": if (cmd.color) currentColor = cmd.color; break;
 
@@ -2010,6 +2012,80 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 
+  // ── Split continuous commands ─────────────────────────
+    function splitContinuousCommands(text) {
+    // Strategy: split on connector words that appear between drawing commands
+    // First try: split on 再/然后/还/又/接着 before drawing verbs
+    // Use a non-capturing group to avoid extra segments
+    var parts = text.split(/(?:再|然后|接着|接下来)(?=\s*(?:画|绘|来|给我|整|搞))/);
+    var result = [];
+    for (var pi = 0; pi < parts.length; pi++) {
+      var s = parts[pi].trim();
+      if (s) result.push(s);
+    }
+    // If still single segment, try 还/又 (which are single chars)
+    if (result.length <= 1) {
+      var t = text;
+      // Replace 还画/又画 with a unique split marker
+      t = t.replace(/还(?=画|绘)/g, "\nSPLIT\n");
+      t = t.replace(/又(?=画|绘)/g, "\nSPLIT\n");
+      var parts2 = t.split("\nSPLIT\n");
+      result = [];
+      for (var pi = 0; pi < parts2.length; pi++) {
+        var s = parts2[pi].trim();
+        if (s) result.push(s);
+      }
+    }
+    // If still single segment, try 和/跟 between commands
+    if (result.length <= 1) {
+      var parts3 = text.split(/(?:和|跟)(?=\s*(?:画|绘|来|给我|整|搞))/);
+      result = [];
+      for (var pi = 0; pi < parts3.length; pi++) {
+        var s = parts3[pi].trim();
+        if (s) result.push(s);
+      }
+    }
+    return result;
+  }function executeActions(actions) {
+    for (var _i = 0; _i < actions.length; _i++) {
+      var cmd = actions[_i];
+      var _ox = window._globalOffsetX || 0;
+    var _oy = window._globalOffsetY || 0;
+    var _c = cmd.color !== undefined ? cmd.color : currentColor;
+    var _ox = window._globalOffsetX || 0;
+    var _oy = window._globalOffsetY || 0;
+      var pts = cmd.points;
+      if (pts && pts.length > 0 && Array.isArray(pts[0])) {
+        pts = pts.map(function(p) { return Array.isArray(p) ? {x: p[0], y: p[1]} : p; });
+      }
+      switch (cmd.action) {
+        case "drawCircle":
+          if (cmd.radiusX !== undefined || cmd.radiusY !== undefined) {
+            drawEllipse(cmd.x || 400, cmd.y || 300, cmd.radiusX || cmd.radius || 40, cmd.radiusY || cmd.radius || 40, _c);
+          } else {
+            drawCircle((cmd.x || 400) + _ox, (cmd.y || 300) + _oy, cmd.radius || currentRadius, _c);
+          }
+          break;
+        case "drawEllipse": drawEllipse((cmd.x || 400) + _ox, (cmd.y || 300) + _oy, cmd.radiusX || 50, cmd.radiusY || 30, _c); break;
+        case "drawRect": drawRect((cmd.x || 300) + _ox, (cmd.y || 200) + _oy, cmd.width || 80, cmd.height || 60, _c); break;
+        case "drawLine": drawLine((cmd.x1 || 200) + _ox, (cmd.y1 || 300) + _oy, (cmd.x2 || 600) + _ox, (cmd.y2 || 300) + _oy, _c); break;
+        case "drawPolygon": case "drawTriangle": if (pts) drawPolygon(pts, _c); break;
+        case "drawArc": drawArc(cmd.x || 400, cmd.y || 300, cmd.radius || 40, cmd.startAngle || 0, cmd.endAngle || 3.14159, _c); break;
+        case "drawStar":
+          if (pts) { drawPolygon(pts, _c); break; }
+          var cx = cmd.x || 400, cy = cmd.y || 300, r = cmd.radius || 40;
+          var starPts = [];
+          for (var si = 0; si < 10; si++) {
+            var angle = (si * Math.PI * 2) / 10 - Math.PI / 2;
+            var rad = si % 2 === 0 ? r : r * 0.4;
+            starPts.push({ x: cx + rad * Math.cos(angle), y: cy + rad * Math.sin(angle) });
+          }
+          drawPolygon(starPts, _c);
+          break;
+      }
+    }
+  }
+
   // ── Speech Recognition ──────────────────────────────────
 
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -2066,6 +2142,73 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // Apply pronunciation correction
       for (const [wrong, correct] of Object.entries(corr)) { lastFinal = lastFinal.replaceAll(wrong, correct); }
+
+      // ── Split continuous commands: "画个猫再画个花再画个房子" ──
+      var segments = splitContinuousCommands(lastFinal);
+      if (segments.length > 1) {
+        console.log("[Continuous] 分割为 " + segments.length + " 段: ", segments);
+        var segIdx = 0;
+        function processNextSegment() {
+          if (segIdx >= segments.length) {
+            setStatus(STATUS.SUCCESS, "全部完成 ✓");
+            return;
+          }
+          var cmd = segments[segIdx];
+          // Shift each subsequent drawing to avoid overlap
+          if (segIdx > 0) {
+            // Apply a global position offset so templates don't overlap
+            var _segN = segIdx;
+            var _offsetCol = (_segN * 180) % 600;
+            var _offsetRow = Math.floor((_segN * 180) / 600) * 180 + 30;
+            window._globalOffsetX = _offsetCol;
+            window._globalOffsetY = _offsetRow;
+          } else {
+            window._globalOffsetX = 0;
+            window._globalOffsetY = 0;
+          }
+          segIdx++;
+          console.log("[Continuous] 执行第 " + segIdx + "/" + segments.length + " 段: " + cmd);
+          // Apply same pipeline for each segment
+          // Try erase/move then relative positioning then AI/local
+          if (parseEraseMoveCommand(cmd)) {
+            setStatus(STATUS.DRAWING, "正在处理...");
+            processNextSegment();
+            return;
+          }
+          var rel = tryRelativePosition(cmd);
+          if (rel) {
+            setStatus(STATUS.DRAWING, "相对位置绘图...");
+            saveSnapshot();
+            executeActions(rel.actions);
+            speak("在" + rel.name + "旁边画好了");
+            processNextSegment();
+            return;
+          }
+          if (aiMode) {
+            setStatus(STATUS.THINKING, "AI 思考中...");
+            parseWithAI(cmd).then(function(data) {
+              var a = data && (data.actions || data.commands);
+              if (a && a.length > 0) {
+                executeAIResponse(data);
+              } else {
+                currentX = (window._globalOffsetX || 0) + 400; currentY = (window._globalOffsetY || 0) + 200;
+                parseLocal(cmd);
+              }
+              processNextSegment();
+            });
+          } else {
+            currentX = (window._globalOffsetX || 0) + 400; currentY = (window._globalOffsetY || 0) + 200;
+            parseLocal(cmd);
+            processNextSegment();
+          }
+        }
+        processNextSegment();
+        // Clear global offset after all segments
+        window._globalOffsetX = 0;
+        window._globalOffsetY = 0;
+        return;  // skip the single-command path below
+      }
+
       // Try erase/move first
       var eraseMoveResult = parseEraseMoveCommand(lastFinal);
       if (eraseMoveResult) {
@@ -2093,12 +2236,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (cmd.radiusX !== undefined || cmd.radiusY !== undefined) {
                   drawEllipse(cmd.x || 400, cmd.y || 300, cmd.radiusX || cmd.radius || 40, cmd.radiusY || cmd.radius || 40, _c);
                 } else {
-                  drawCircle(cmd.x || 400, cmd.y || 300, cmd.radius || currentRadius, _c);
+                  drawCircle((cmd.x || 400) + _ox, (cmd.y || 300) + _oy, cmd.radius || currentRadius, _c);
                 }
                 break;
-              case "drawEllipse": drawEllipse(cmd.x || 400, cmd.y || 300, cmd.radiusX || 50, cmd.radiusY || 30, _c); break;
-              case "drawRect": drawRect(cmd.x || 300, cmd.y || 200, cmd.width || 80, cmd.height || 60, _c); break;
-              case "drawLine": drawLine(cmd.x1 || 200, cmd.y1 || 300, cmd.x2 || 600, cmd.y2 || 300, _c); break;
+              case "drawEllipse": drawEllipse((cmd.x || 400) + _ox, (cmd.y || 300) + _oy, cmd.radiusX || 50, cmd.radiusY || 30, _c); break;
+              case "drawRect": drawRect((cmd.x || 300) + _ox, (cmd.y || 200) + _oy, cmd.width || 80, cmd.height || 60, _c); break;
+              case "drawLine": drawLine((cmd.x1 || 200) + _ox, (cmd.y1 || 300) + _oy, (cmd.x2 || 600) + _ox, (cmd.y2 || 300) + _oy, _c); break;
               case "drawPolygon": case "drawTriangle": if (pts) drawPolygon(pts, _c); break;
               case "drawArc": drawArc(cmd.x || 400, cmd.y || 300, cmd.radius || 40, cmd.startAngle || 0, cmd.endAngle || 3.14159, _c); break;
               case "drawStar":
