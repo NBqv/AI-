@@ -1960,6 +1960,12 @@ document.addEventListener("DOMContentLoaded", () => {
             executeAIResponse(data);
             setStatus(STATUS.SUCCESS, "完成 ✓");
           } else {
+            for (var _tn2 in templateDB) {
+              if (text.indexOf(_tn2) >= 0 || (templateDB[_tn2].aliases && templateDB[_tn2].aliases.some(function(a) { return text.indexOf(a) >= 0; }))) {
+                lastTemplateName = _tn2;
+                break;
+              }
+            }
             parseLocal(text);
           }
         });
@@ -2324,6 +2330,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
       } else {
 
+        // Local mode: try to detect template name for move/erase support
+        for (var _tn in templateDB) {
+          if (lastFinal.indexOf(_tn) >= 0 || (templateDB[_tn].aliases && templateDB[_tn].aliases.some(function(a) { return lastFinal.indexOf(a) >= 0; }))) {
+            lastTemplateName = _tn;
+            break;
+          }
+        }
         parseLocal(lastFinal);
 
       }
