@@ -849,9 +849,37 @@ document.addEventListener("DOMContentLoaded", () => {
       return false;
     }
 
-    var step = 120;
+    var step = 80;
     var dx = Math.round(dir.dx * step);
     var dy = Math.round(dir.dy * step);
+
+    // Pre-check bounds: calculate new bounding box of the shape
+    var minX = 9999, maxX = 0, minY = 9999, maxY = 0;
+    var hasCoords = false;
+    for (var hi = 0; hi < actionHistory.length; hi++) {
+      var entry = actionHistory[hi];
+      var desc = entry.desc || "";
+      if (desc.indexOf(keyword) < 0 && desc.indexOf("圆形") < 0 && desc.indexOf("矩形") < 0 && desc.indexOf("椭圆") < 0) continue;
+      if (desc.indexOf(keyword) < 0) continue;
+      var args = entry.args;
+      if (entry.fn === "drawCircle" || entry.fn === "drawArc") {
+        if (args.length >= 2) { minX = Math.min(minX, args[0]+dx-args[2]); maxX = Math.max(maxX, args[0]+dx+args[2]); minY = Math.min(minY, args[1]+dy-args[2]); maxY = Math.max(maxY, args[1]+dy+args[2]); hasCoords = true; }
+      } else if (entry.fn === "drawRect") {
+        if (args.length >= 4) { minX = Math.min(minX, args[0]+dx); maxX = Math.max(maxX, args[0]+dx+args[2]); minY = Math.min(minY, args[1]+dy); maxY = Math.max(maxY, args[1]+dy+args[3]); hasCoords = true; }
+      } else if (entry.fn === "drawLine") {
+        if (args.length >= 4) { minX = Math.min(minX, args[0]+dx, args[2]+dx); maxX = Math.max(maxX, args[0]+dx, args[2]+dx); minY = Math.min(minY, args[1]+dy, args[3]+dy); maxY = Math.max(maxY, args[1]+dy, args[3]+dy); hasCoords = true; }
+      }
+    }
+    if (hasCoords) {
+      // Clamp: ensure shape stays within canvas
+      var margin = 20;
+      if (minX < margin) { dx += (margin - minX); }
+      if (maxX > 800 - margin) { dx -= (maxX - (800 - margin)); }
+      if (minY < margin) { dy += (margin - minY); }
+      if (maxY > 600 - margin) { dy -= (maxY - (600 - margin)); }
+      dx = Math.round(dx);
+      dy = Math.round(dy);
+    }
 
     // Modify actionHistory: find actions belonging to this shape and offset coords
     var found = false;
