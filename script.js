@@ -826,7 +826,7 @@ document.addEventListener("DOMContentLoaded", () => {
     return false;
   }
 
-  function moveShapeByKeyword(keyword, direction) {
+    function moveShapeByKeyword(keyword, direction) {
     var dirMap = {
       "左": {dx: -1, dy: 0}, "左边": {dx: -1, dy: 0}, "左侧": {dx: -1, dy: 0},
       "右": {dx: 1, dy: 0}, "右边": {dx: 1, dy: 0}, "右侧": {dx: 1, dy: 0},
@@ -836,87 +836,101 @@ document.addEventListener("DOMContentLoaded", () => {
     var dir = dirMap[direction];
     if (!dir) return false;
 
-    // Find the shape
-    var targetIdx = -1;
-    for (var gi = graphList.length - 1; gi >= 0; gi--) {
-      if (graphList[gi].desc && graphList[gi].desc.indexOf(keyword) >= 0) {
-        targetIdx = gi;
-        break;
+    // Find shape via _batch_start marker
+    var markerIdx = -1;
+    for (var hi = 0; hi < actionHistory.length; hi++) {
+      if (actionHistory[hi].fn === "_batch_start") {
+        var desc = actionHistory[hi].desc || "";
+        if (desc.indexOf(keyword) >= 0) {
+          markerIdx = hi;
+          break;
+        }
       }
     }
-    if (targetIdx < 0) {
-      speak("没找到" + keyword);
-      return false;
+
+    if (markerIdx < 0) {
+      // Fallback: find in graphList by keyword
+      var found = false;
+      for (var gi = graphList.length - 1; gi >= 0; gi--) {
+        if (graphList[gi].desc && graphList[gi].desc.indexOf(keyword) >= 0) {
+          found = true; break;
+        }
+      }
+      if (!found) { speak("没找到" + keyword); return false; }
+      // Try offsetting single actions by desc match
+      var step = 80;
+      var dx = Math.round(dir.dx * step);
+      var dy = Math.round(dir.dy * step);
+      var hit = false;
+      for (var hi = 0; hi < actionHistory.length; hi++) {
+        var entry = actionHistory[hi];
+        if ((entry.desc || "").indexOf(keyword) >= 0) {
+          var args = entry.args;
+          if (entry.fn === "drawCircle" || entry.fn === "drawArc") { if (args.length >= 2) { args[0] += dx; args[1] += dy; hit = true; } }
+          else if (entry.fn === "drawRect") { if (args.length >= 2) { args[0] += dx; args[1] += dy; hit = true; } }
+          else if (entry.fn === "drawEllipse") { if (args.length >= 2) { args[0] += dx; args[1] += dy; hit = true; } }
+          else if (entry.fn === "drawLine") { if (args.length >= 4) { args[0] += dx; args[1] += dy; args[2] += dx; args[3] += dy; hit = true; } }
+          else if (entry.fn === "drawPolygon") { if (args[0] && Array.isArray(args[0])) { args[0] = args[0].map(function(p) { return {x:p.x+dx, y:p.y+dy}; }); hit = true; } }
+        }
+      }
+      if (!hit) { speak("无法移动" + keyword); return false; }
+      saveSnapshot(); rebuildCanvas(); speak("已移动" + keyword); return true;
     }
 
+    // Find next marker
+    var nextMarker = -1;
+    for (var hi = markerIdx + 1; hi < actionHistory.length; hi++) {
+      if (actionHistory[hi].fn === "_batch_start") { nextMarker = hi; break; }
+    }
+    var endIdx = nextMarker > 0 ? nextMarker : actionHistory.length;
+
+    // Calculate offset
     var step = 80;
     var dx = Math.round(dir.dx * step);
     var dy = Math.round(dir.dy * step);
 
-    // Pre-check bounds: calculate new bounding box of the shape
+    // Bounds check on the batch actions
     var minX = 9999, maxX = 0, minY = 9999, maxY = 0;
-    var hasCoords = false;
-    for (var hi = 0; hi < actionHistory.length; hi++) {
+    for (var hi = markerIdx + 1; hi < endIdx; hi++) {
       var entry = actionHistory[hi];
-      var desc = entry.desc || "";
-      if (desc.indexOf(keyword) < 0 && desc.indexOf("圆形") < 0 && desc.indexOf("矩形") < 0 && desc.indexOf("椭圆") < 0) continue;
-      if (desc.indexOf(keyword) < 0) continue;
       var args = entry.args;
-      if (entry.fn === "drawCircle" || entry.fn === "drawArc") {
-        if (args.length >= 2) { minX = Math.min(minX, args[0]+dx-args[2]); maxX = Math.max(maxX, args[0]+dx+args[2]); minY = Math.min(minY, args[1]+dy-args[2]); maxY = Math.max(maxY, args[1]+dy+args[2]); hasCoords = true; }
+      if (entry.fn === "drawCircle") {
+        minX = Math.min(minX, args[0]-args[2]); maxX = Math.max(maxX, args[0]+args[2]);
+        minY = Math.min(minY, args[1]-args[2]); maxY = Math.max(maxY, args[1]+args[2]);
       } else if (entry.fn === "drawRect") {
-        if (args.length >= 4) { minX = Math.min(minX, args[0]+dx); maxX = Math.max(maxX, args[0]+dx+args[2]); minY = Math.min(minY, args[1]+dy); maxY = Math.max(maxY, args[1]+dy+args[3]); hasCoords = true; }
+        minX = Math.min(minX, args[0]); maxX = Math.max(maxX, args[0]+args[2]);
+        minY = Math.min(minY, args[1]); maxY = Math.max(maxY, args[1]+args[3]);
       } else if (entry.fn === "drawLine") {
-        if (args.length >= 4) { minX = Math.min(minX, args[0]+dx, args[2]+dx); maxX = Math.max(maxX, args[0]+dx, args[2]+dx); minY = Math.min(minY, args[1]+dy, args[3]+dy); maxY = Math.max(maxY, args[1]+dy, args[3]+dy); hasCoords = true; }
-      }
-    }
-    if (hasCoords) {
-      // Clamp: ensure shape stays within canvas
-      var margin = 20;
-      if (minX < margin) { dx += (margin - minX); }
-      if (maxX > 800 - margin) { dx -= (maxX - (800 - margin)); }
-      if (minY < margin) { dy += (margin - minY); }
-      if (maxY > 600 - margin) { dy -= (maxY - (600 - margin)); }
-      dx = Math.round(dx);
-      dy = Math.round(dy);
-    }
-
-    // Modify actionHistory: find actions belonging to this shape and offset coords
-    var found = false;
-    for (var hi = 0; hi < actionHistory.length; hi++) {
-      var entry = actionHistory[hi];
-      // Check if this entry's args contain coordinates and it's part of the target shape
-      // Simple heuristic: if the entry was recorded during the same batch as the target
-      var shouldOffset = false;
-      if (keyword.length >= 2) {
-        // Try matching by checking if any graphList entry with this keyword
-        // roughly corresponds to this action
-        var desc = entry.desc || "";
-        if (desc.indexOf(keyword) >= 0) shouldOffset = true;
-      }
-
-      if (shouldOffset) {
-        var args = entry.args;
-        if (entry.fn === "drawCircle" || entry.fn === "drawArc") {
-          if (args.length >= 2) { args[0] += dx; args[1] += dy; }
-        } else if (entry.fn === "drawRect") {
-          if (args.length >= 2) { args[0] += dx; args[1] += dy; }
-        } else if (entry.fn === "drawLine") {
-          if (args.length >= 4) { args[0] += dx; args[1] += dy; args[2] += dx; args[3] += dy; }
-        } else if (entry.fn === "drawEllipse") {
-          if (args.length >= 2) { args[0] += dx; args[1] += dy; }
-        } else if (entry.fn === "drawPolygon") {
-          if (args[0] && Array.isArray(args[0])) {
-            args[0] = args[0].map(function(p) { return {x: p.x + dx, y: p.y + dy}; });
-          }
+        minX = Math.min(minX, args[0], args[2]); maxX = Math.max(maxX, args[0], args[2]);
+        minY = Math.min(minY, args[1], args[3]); maxY = Math.max(maxY, args[1], args[3]);
+      } else if (entry.fn === "drawPolygon" && args[0]) {
+        for (var pi = 0; pi < args[0].length; pi++) {
+          minX = Math.min(minX, args[0][pi].x); maxX = Math.max(maxX, args[0][pi].x);
+          minY = Math.min(minY, args[0][pi].y); maxY = Math.max(maxY, args[0][pi].y);
         }
-        found = true;
       }
     }
+    var margin = 20;
+    if (minX + dx < margin) dx = margin - minX;
+    if (maxX + dx > 800 - margin) dx = (800 - margin) - maxX;
+    if (minY + dy < margin) dy = margin - minY;
+    if (maxY + dy > 600 - margin) dy = (600 - margin) - maxY;
+    dx = Math.round(dx); dy = Math.round(dy);
 
-    if (!found) {
-      speak("无法移动" + keyword);
-      return false;
+    // Offset all actions in the batch
+    for (var hi = markerIdx + 1; hi < endIdx; hi++) {
+      var entry = actionHistory[hi];
+      var args = entry.args;
+      if (entry.fn === "drawCircle" || entry.fn === "drawArc") { if (args.length >= 2) { args[0] += dx; args[1] += dy; } }
+      else if (entry.fn === "drawRect") { if (args.length >= 2) { args[0] += dx; args[1] += dy; } }
+      else if (entry.fn === "drawEllipse") { if (args.length >= 2) { args[0] += dx; args[1] += dy; } }
+      else if (entry.fn === "drawLine") { if (args.length >= 4) { args[0] += dx; args[1] += dy; args[2] += dx; args[3] += dy; } }
+      else if (entry.fn === "drawPolygon") { if (args[0] && Array.isArray(args[0])) { args[0] = args[0].map(function(p) { return {x:p.x+dx, y:p.y+dy}; }); } }
+    }
+
+    // Also update the composite graphList entry
+    for (var gi = 0; gi < graphList.length; gi++) {
+      if (graphList[gi].cx != null) { graphList[gi].cx += dx; graphList[gi].cy += dy; }
     }
 
     saveSnapshot();
@@ -924,15 +938,6 @@ document.addEventListener("DOMContentLoaded", () => {
     speak("已将" + keyword + "移到" + direction);
     return true;
   }
-
-  // ── Relative positioning: "在兔子左边画个乌龟" ──────────
-  const REL_DIR_MAP = {
-    "左边": { dx: -1, dy: 0 }, "左侧": { dx: -1, dy: 0 }, "左": { dx: -1, dy: 0 },
-    "右边": { dx: 1, dy: 0 }, "右侧": { dx: 1, dy: 0 }, "右": { dx: 1, dy: 0 },
-    "上边": { dx: 0, dy: -1 }, "上面": { dx: 0, dy: -1 }, "上方": { dx: 0, dy: -1 }, "上": { dx: 0, dy: -1 },
-    "下边": { dx: 0, dy: 1 }, "下面": { dx: 0, dy: 1 }, "下方": { dx: 0, dy: 1 }, "下": { dx: 0, dy: 1 },
-    "旁边": { dx: -1.5, dy: 0 }, "附近": { dx: -1.5, dy: -0.5 },
-  };
 
   function offsetTemplateActions(actions, dx, dy) {
     return actions.map(function(a) {
