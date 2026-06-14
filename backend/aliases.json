@@ -3438,7 +3438,7 @@
           "color": "white"
         },
         {
-          "action": "drawTriangle",
+          "action": "drawPolygon",
           "points": [
             {
               "x": 390,
@@ -4367,12 +4367,22 @@
           "color": "white"
         },
         {
-          "action": "drawTriangle",
-          "x": 375,
-          "y": 300,
-          "width": 100,
-          "height": 100,
-          "color": "brown"
+          "action": "drawPolygon",
+          "color": "brown",
+          "points": [
+            {
+              "x": 325,
+              "y": 350
+            },
+            {
+              "x": 425,
+              "y": 350
+            },
+            {
+              "x": 375,
+              "y": 250
+            }
+          ]
         },
         {
           "action": "drawLine",
@@ -5669,7 +5679,7 @@
           "color": "black"
         },
         {
-          "action": "drawTriangle",
+          "action": "drawPolygon",
           "points": [
             {
               "x": 300,
@@ -6729,20 +6739,40 @@
           "color": "black"
         },
         {
-          "action": "drawTriangle",
-          "x": 380,
-          "y": 200,
-          "base": 40,
-          "height": 20,
-          "color": "red"
+          "action": "drawPolygon",
+          "color": "red",
+          "points": [
+            {
+              "x": 360,
+              "y": 210
+            },
+            {
+              "x": 400,
+              "y": 210
+            },
+            {
+              "x": 380,
+              "y": 190
+            }
+          ]
         },
         {
-          "action": "drawTriangle",
-          "x": 420,
-          "y": 200,
-          "base": 40,
-          "height": 20,
-          "color": "red"
+          "action": "drawPolygon",
+          "color": "red",
+          "points": [
+            {
+              "x": 400,
+              "y": 210
+            },
+            {
+              "x": 440,
+              "y": 210
+            },
+            {
+              "x": 420,
+              "y": 190
+            }
+          ]
         },
         {
           "action": "drawLine",
@@ -9090,13 +9120,22 @@
           "color": "green"
         },
         {
-          "action": "drawTriangle",
-          "x": 550,
-          "y": 320,
-          "base": 20,
-          "height": 10,
-          "angle": 0,
-          "color": "green"
+          "action": "drawPolygon",
+          "color": "green",
+          "points": [
+            {
+              "x": 540,
+              "y": 325
+            },
+            {
+              "x": 560,
+              "y": 325
+            },
+            {
+              "x": 550,
+              "y": 315
+            }
+          ]
         },
         {
           "action": "drawLine",
@@ -9269,22 +9308,40 @@
           "color": "black"
         },
         {
-          "action": "drawTriangle",
-          "x": 370,
-          "y": 200,
-          "base": 20,
-          "height": 10,
-          "angle": 0,
-          "color": "yellow"
+          "action": "drawPolygon",
+          "color": "yellow",
+          "points": [
+            {
+              "x": 360,
+              "y": 205
+            },
+            {
+              "x": 380,
+              "y": 205
+            },
+            {
+              "x": 370,
+              "y": 195
+            }
+          ]
         },
         {
-          "action": "drawTriangle",
-          "x": 430,
-          "y": 200,
-          "base": 20,
-          "height": 10,
-          "angle": 0,
-          "color": "yellow"
+          "action": "drawPolygon",
+          "color": "yellow",
+          "points": [
+            {
+              "x": 420,
+              "y": 205
+            },
+            {
+              "x": 440,
+              "y": 205
+            },
+            {
+              "x": 430,
+              "y": 195
+            }
+          ]
         }
       ]
     },
@@ -10467,28 +10524,58 @@
           "color": "blue"
         },
         {
-          "action": "drawTriangle",
-          "x": 400,
-          "y": 250,
-          "width": 200,
-          "height": 100,
-          "color": "blue"
+          "action": "drawPolygon",
+          "color": "blue",
+          "points": [
+            {
+              "x": 300,
+              "y": 300
+            },
+            {
+              "x": 500,
+              "y": 300
+            },
+            {
+              "x": 400,
+              "y": 200
+            }
+          ]
         },
         {
-          "action": "drawTriangle",
-          "x": 350,
-          "y": 350,
-          "width": 100,
-          "height": 50,
-          "color": "blue"
+          "action": "drawPolygon",
+          "color": "blue",
+          "points": [
+            {
+              "x": 300,
+              "y": 375
+            },
+            {
+              "x": 400,
+              "y": 375
+            },
+            {
+              "x": 350,
+              "y": 325
+            }
+          ]
         },
         {
-          "action": "drawTriangle",
-          "x": 450,
-          "y": 350,
-          "width": 100,
-          "height": 50,
-          "color": "blue"
+          "action": "drawPolygon",
+          "color": "blue",
+          "points": [
+            {
+              "x": 400,
+              "y": 375
+            },
+            {
+              "x": 500,
+              "y": 375
+            },
+            {
+              "x": 450,
+              "y": 325
+            }
+          ]
         },
         {
           "action": "drawCircle",
@@ -10692,13 +10779,22 @@
           "color": "black"
         },
         {
-          "action": "drawTriangle",
-          "x": 400,
-          "y": 300,
-          "base": 50,
-          "height": 25,
-          "angle": 90,
-          "color": "orange"
+          "action": "drawPolygon",
+          "color": "orange",
+          "points": [
+            {
+              "x": 375,
+              "y": 287
+            },
+            {
+              "x": 425,
+              "y": 300
+            },
+            {
+              "x": 375,
+              "y": 312
+            }
+          ]
         }
       ]
     },
@@ -10807,13 +10903,22 @@
           "color": "brown"
         },
         {
-          "action": "drawTriangle",
-          "x": 375,
-          "y": 280,
-          "base": 20,
-          "height": 10,
-          "angle": 0,
-          "color": "yellow"
+          "action": "drawPolygon",
+          "color": "yellow",
+          "points": [
+            {
+              "x": 365,
+              "y": 285
+            },
+            {
+              "x": 385,
+              "y": 285
+            },
+            {
+              "x": 375,
+              "y": 275
+            }
+          ]
         },
         {
           "action": "drawPolygon",
@@ -10867,13 +10972,22 @@
           "color": "yellow"
         },
         {
-          "action": "drawTriangle",
-          "x": 400,
-          "y": 270,
-          "base": 20,
-          "height": 10,
-          "angle": 0,
-          "color": "red"
+          "action": "drawPolygon",
+          "color": "red",
+          "points": [
+            {
+              "x": 390,
+              "y": 275
+            },
+            {
+              "x": 410,
+              "y": 275
+            },
+            {
+              "x": 400,
+              "y": 265
+            }
+          ]
         },
         {
           "action": "drawCircle",
