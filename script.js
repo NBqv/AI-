@@ -2011,35 +2011,46 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
   // ── Split continuous commands ─────────────────────────
-  function splitContinuousCommands(text) {
-    // Split on: 再, 然后, 接着, 还, 又 (only between commands, not inside words)
-    // Child speech: "画个猫再画个花再画个房子"
-    // Also support: "画个猫然后画个花" "画个猫接着画个花"
-    var parts = text.split(/[再然后还又](?=画|绘|来|给我|整|搞)/);
-    // Filter empty and trim
+    function splitContinuousCommands(text) {
+    // Strategy: split on connector words that appear between drawing commands
+    // First try: split on 再/然后/还/又/接着 before drawing verbs
+    // Use a non-capturing group to avoid extra segments
+    var parts = text.split(/(?:再|然后|接着|接下来)(?=\s*(?:画|绘|来|给我|整|搞))/);
     var result = [];
     for (var pi = 0; pi < parts.length; pi++) {
       var s = parts[pi].trim();
       if (s) result.push(s);
     }
-    // If only one part, also try splitting on 接着/然后/跟/和
+    // If still single segment, try 还/又 (which are single chars)
     if (result.length <= 1) {
-      parts = text.split(/(?:接着|然后|跟|和)(?=画|绘|来|给我|整|搞)/);
+      var t = text;
+      // Replace 还画/又画 with a unique split marker
+      t = t.replace(/还(?=画|绘)/g, "
+SPLIT
+");
+      t = t.replace(/又(?=画|绘)/g, "
+SPLIT
+");
+      var parts2 = t.split("
+SPLIT
+");
       result = [];
-      for (var pi = 0; pi < parts.length; pi++) {
-        var s = parts[pi].trim();
+      for (var pi = 0; pi < parts2.length; pi++) {
+        var s = parts2[pi].trim();
         if (s) result.push(s);
       }
     }
-    // If still only one, try splitting on simple 和 between nouns
-    if (result.length <= 1 && text.indexOf("画") >= 0) {
-      // "猫和花" -> already handled by individual commands
-      // Don't over-split
+    // If still single segment, try 和/跟 between commands
+    if (result.length <= 1) {
+      var parts3 = text.split(/(?:和|跟)(?=\s*(?:画|绘|来|给我|整|搞))/);
+      result = [];
+      for (var pi = 0; pi < parts3.length; pi++) {
+        var s = parts3[pi].trim();
+        if (s) result.push(s);
+      }
     }
     return result;
-  }
-
-  function executeActions(actions) {
+  }function executeActions(actions) {
     for (var _i = 0; _i < actions.length; _i++) {
       var cmd = actions[_i];
       var _c = cmd.color !== undefined ? cmd.color : currentColor;
